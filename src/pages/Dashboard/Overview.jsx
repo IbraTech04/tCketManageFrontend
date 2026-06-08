@@ -116,16 +116,16 @@ export default function Overview() {
   const recentOrders = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8);
 
   return (
-    <div className="fade-in" style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="fade-in page-content">
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
+      <div className="stat-grid" style={{ marginBottom: 22 }}>
         <StatCard icon="ticket" label="Tickets Sold" value={ticketCount ?? '—'} color="var(--orange)" />
         <StatCard icon="dollar" label="Revenue" value={money(revenue)} sub={`${paidOrders.length} paid orders`} color="var(--green)" />
         <StatCard icon="layers" label="Active Zones" value={zones.length} color="var(--blue)" />
         <StatCard icon="scan" label="Total Scans" value={totalScans ?? '—'} color="var(--purple)" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="panel-grid" style={{ marginBottom: 14 }}>
         {/* Zones */}
         <Panel title="Zones" icon="layers">
           {zones.length === 0 ? (

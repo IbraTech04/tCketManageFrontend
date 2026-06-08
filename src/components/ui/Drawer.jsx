@@ -14,7 +14,7 @@ export default function Drawer({ open, onClose, children, width = 440 }) {
       <div
         className="tm-scroll"
         style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width,
+          position: 'fixed', top: 0, right: 0, bottom: 0, width, maxWidth: '100vw',
           background: 'var(--surface)', borderLeft: '1px solid var(--border)',
           boxShadow: 'var(--shadow-pop)', zIndex: 41,
           transform: open ? 'translateX(0)' : 'translateX(100%)',

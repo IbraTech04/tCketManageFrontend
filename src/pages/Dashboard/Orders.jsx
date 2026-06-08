@@ -225,7 +225,7 @@ export default function Orders() {
   }
 
   return (
-    <div className="fade-in" style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="fade-in page-content">
       {error && (
         <div style={{
           background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',

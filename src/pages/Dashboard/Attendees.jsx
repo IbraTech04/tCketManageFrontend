@@ -272,7 +272,7 @@ function AddAttendeeModal({ eventId, onClose, onCreated }) {
     >
       <div
         className="card pop-in"
-        style={{ width: 400, padding: '28px', boxShadow: 'var(--shadow-pop)' }}
+        style={{ width: 400, maxWidth: 'calc(100vw - 32px)', padding: '28px', boxShadow: 'var(--shadow-pop)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -459,7 +459,7 @@ export default function Attendees() {
   if (loading) return <LoadingCenter />;
 
   return (
-    <div className="fade-in" style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="fade-in page-content">
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 300 }}>

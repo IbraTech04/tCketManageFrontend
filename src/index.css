@@ -163,3 +163,34 @@ textarea.inp { height: auto; padding: 9px 11px; }
   border-color: rgba(24,24,27,0.15);
   border-top-color: var(--text-2);
 }
+
+/* ── responsive grid helpers ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+/* iOS safe-area support for bottom nav */
+.db-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.db-main-scroll-mobile {
+  padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+}
+
+.page-content {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .panel-grid { grid-template-columns: 1fr; }
+  .page-content { padding: 16px; }
+}
