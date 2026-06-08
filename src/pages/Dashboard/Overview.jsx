@@ -3,10 +3,11 @@ import { useParams } from 'react-router-dom';
 import { eventsApi } from '../../api/events';
 import { ordersApi } from '../../api/orders';
 import { scansApi } from '../../api/scans';
-import { zoneColor, money } from '../../api/zoneTypes';
+import { zoneTypesApi, zoneColor, money } from '../../api/zoneTypes';
 import { useApp } from '../../contexts/AppContext';
 import Panel from '../../components/ui/Panel';
 import Icon from '../../components/ui/Icon';
+import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -67,7 +68,7 @@ function formatTs(iso) {
 
 export default function Overview() {
   const { eventId } = useParams();
-  const { currentEvent } = useApp();
+  const { currentEvent, setCurrentEvent } = useApp();
 
   const [event, setEvent] = useState(currentEvent);
   const [ticketCount, setTicketCount] = useState(null);
@@ -76,6 +77,15 @@ export default function Overview() {
   const [totalScans, setTotalScans] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Zone management
+  const [addingZone, setAddingZone] = useState(false);
+  const [newZoneName, setNewZoneName] = useState('');
+  const [editingZoneId, setEditingZoneId] = useState(null);
+  const [editZoneName, setEditZoneName] = useState('');
+  const [deletingZoneId, setDeletingZoneId] = useState(null);
+  const [zoneBusy, setZoneBusy] = useState(false);
+  const [zoneError, setZoneError] = useState('');
 
   useEffect(() => {
     if (!eventId) return;
@@ -107,6 +117,59 @@ export default function Overview() {
     return () => { cancelled = true; };
   }, [eventId]);
 
+  function patchZones(newZones) {
+    const updated = { ...event, zones: newZones };
+    setEvent(updated);
+    setCurrentEvent(updated);
+  }
+
+  async function handleAddZone() {
+    if (!newZoneName.trim()) return;
+    setZoneBusy(true);
+    setZoneError('');
+    try {
+      const zone = await eventsApi.addZone(eventId, newZoneName.trim());
+      patchZones([...(event?.zones ?? []), zone]);
+      setNewZoneName('');
+      setAddingZone(false);
+    } catch (ex) {
+      setZoneError(ex.message || 'Failed to add zone');
+    } finally {
+      setZoneBusy(false);
+    }
+  }
+
+  async function handleSaveEdit(zoneId) {
+    if (!editZoneName.trim()) return;
+    setZoneBusy(true);
+    setZoneError('');
+    try {
+      const updated = await zoneTypesApi.updateZone(zoneId, { name: editZoneName.trim() });
+      patchZones((event?.zones ?? []).map((z) =>
+        z.id === zoneId ? { ...z, ...(updated || {}), name: editZoneName.trim() } : z
+      ));
+      setEditingZoneId(null);
+    } catch (ex) {
+      setZoneError(ex.message || 'Failed to update zone');
+    } finally {
+      setZoneBusy(false);
+    }
+  }
+
+  async function handleDeleteZone(zoneId) {
+    setZoneBusy(true);
+    setZoneError('');
+    try {
+      await zoneTypesApi.deleteZone(zoneId);
+      patchZones((event?.zones ?? []).filter((z) => z.id !== zoneId));
+      setDeletingZoneId(null);
+    } catch (ex) {
+      setZoneError(ex.message || 'Failed to delete zone');
+    } finally {
+      setZoneBusy(false);
+    }
+  }
+
   if (loading) return <LoadingCenter />;
   if (error) return <ErrorMsg msg={error} />;
 
@@ -127,30 +190,135 @@ export default function Overview() {
 
       <div className="panel-grid" style={{ marginBottom: 14 }}>
         {/* Zones */}
-        <Panel title="Zones" icon="layers">
-          {zones.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-3)', padding: '8px 0' }}>No zones configured.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {zones.map((zone, i) => (
-                <div key={zone.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 10px', background: 'var(--surface-2)',
-                  borderRadius: 'var(--r)', border: '1px solid var(--border)',
-                }}>
+        <Panel
+          title="Zones"
+          icon="layers"
+          right={
+            !addingZone && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="plus"
+                onClick={() => { setAddingZone(true); setNewZoneName(''); setZoneError(''); setEditingZoneId(null); setDeletingZoneId(null); }}
+              >
+                Add zone
+              </Button>
+            )
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {zones.length === 0 && !addingZone && (
+              <div style={{ fontSize: 13, color: 'var(--text-3)', padding: '4px 0' }}>No zones configured.</div>
+            )}
+
+            {zones.map((zone) => {
+              const isEditing = editingZoneId === zone.id;
+              const isDeleting = deletingZoneId === zone.id;
+              return (
+                <div
+                  key={zone.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px', borderRadius: 'var(--r)',
+                    border: `1px solid ${isDeleting ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
+                    background: isDeleting ? 'var(--red-soft)' : 'var(--surface-2)',
+                    transition: 'background .15s, border-color .15s',
+                  }}
+                >
                   <span style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: zoneColor(zone.id), flexShrink: 0,
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    background: zoneColor(zone.id),
                     boxShadow: `0 0 0 3px ${zoneColor(zone.id)}22`,
                   }} />
-                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{zone.name}</span>
-                  {zone.description && (
-                    <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{zone.description}</span>
+
+                  {isEditing ? (
+                    <>
+                      <input
+                        className="inp"
+                        style={{ flex: 1, height: 28, fontSize: 13 }}
+                        value={editZoneName}
+                        onChange={(e) => setEditZoneName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(zone.id);
+                          if (e.key === 'Escape') setEditingZoneId(null);
+                        }}
+                        autoFocus
+                      />
+                      <Button variant="primary" size="sm" onClick={() => handleSaveEdit(zone.id)} disabled={zoneBusy || !editZoneName.trim()}>
+                        {zoneBusy ? <Spinner size={12} /> : 'Save'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setEditingZoneId(null)}>Cancel</Button>
+                    </>
+                  ) : isDeleting ? (
+                    <>
+                      <span style={{ fontSize: 12.5, color: 'var(--red)', flex: 1 }}>Delete &ldquo;{zone.name}&rdquo;?</span>
+                      <Button variant="danger" size="sm" onClick={() => handleDeleteZone(zone.id)} disabled={zoneBusy}>
+                        {zoneBusy ? <Spinner size={12} /> : 'Delete'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setDeletingZoneId(null)}>Cancel</Button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{zone.name}</span>
+                      <button
+                        title="Edit zone"
+                        onClick={() => { setEditingZoneId(zone.id); setEditZoneName(zone.name); setDeletingZoneId(null); setZoneError(''); }}
+                        style={{ all: 'unset', cursor: 'pointer', display: 'flex', padding: 4, borderRadius: 6, color: 'var(--text-3)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-3)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.background = ''; }}
+                      >
+                        <Icon name="edit" size={13} />
+                      </button>
+                      <button
+                        title="Delete zone"
+                        onClick={() => { setDeletingZoneId(zone.id); setEditingZoneId(null); setZoneError(''); }}
+                        style={{ all: 'unset', cursor: 'pointer', display: 'flex', padding: 4, borderRadius: 6, color: 'var(--text-3)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'var(--red-soft)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.background = ''; }}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+
+            {/* Add zone input */}
+            {addingZone && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', borderRadius: 'var(--r)',
+                border: '1px solid rgba(255,106,26,0.25)',
+                background: 'var(--orange-softer)',
+              }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--surface-3)', border: '1px dashed var(--border-2)', flexShrink: 0 }} />
+                <input
+                  className="inp"
+                  style={{ flex: 1, height: 28, fontSize: 13 }}
+                  placeholder="Zone name"
+                  value={newZoneName}
+                  onChange={(e) => setNewZoneName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddZone();
+                    if (e.key === 'Escape') { setAddingZone(false); setNewZoneName(''); }
+                  }}
+                  autoFocus
+                />
+                <Button variant="primary" size="sm" onClick={handleAddZone} disabled={zoneBusy || !newZoneName.trim()}>
+                  {zoneBusy ? <Spinner size={12} /> : 'Add'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setAddingZone(false); setNewZoneName(''); setZoneError(''); }}>Cancel</Button>
+              </div>
+            )}
+
+            {zoneError && (
+              <div style={{ fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Icon name="alert" size={12} color="var(--red)" />
+                {zoneError}
+              </div>
+            )}
+          </div>
         </Panel>
 
         {/* Recent Scans */}

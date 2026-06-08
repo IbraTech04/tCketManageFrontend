@@ -155,8 +155,8 @@ export default function Dashboard() {
                 }}
                 onMouseLeave={(e) => {
                   if (!e.currentTarget.classList.contains('active')) {
-                    e.currentTarget.style.background = '';
-                    e.currentTarget.style.color = '';
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-2)';
                   }
                 }}
               >
