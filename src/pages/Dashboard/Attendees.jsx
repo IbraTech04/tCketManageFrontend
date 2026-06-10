@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { eventsApi } from '../../api/events';
 import { ticketsApi } from '../../api/tickets';
-import { zoneColor, entitlementMap } from '../../api/zoneTypes';
+import { zoneTypesApi, zoneColor, entitlementMap } from '../../api/zoneTypes';
+import { watchEmailJob } from '../../lib/stomp';
 import { useApp } from '../../contexts/AppContext';
 import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
@@ -71,24 +72,167 @@ function LoadingCenter() {
   );
 }
 
-function TicketDrawer({ ticket, open, onClose, onResend }) {
+function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpdate }) {
+  const { currentEvent } = useApp();
+
   const [resending, setResending] = useState(false);
   const [resendErr, setResendErr] = useState('');
-  if (!ticket) return null;
-  const emap = entitlementMap(ticket.ticketType || {});
-  const entitlements = ticket.ticketType?.entitlements ?? [];
+  const [resendJobId, setResendJobId] = useState(null);
 
+  // Change ticket type
+  const [changingType, setChangingType] = useState(false);
+  const [allTypes, setAllTypes] = useState([]);
+  const [typesLoading, setTypesLoading] = useState(false);
+  const [selectedTypeId, setSelectedTypeId] = useState('');
+  const [typeChangeSaving, setTypeChangeSaving] = useState(false);
+  const [typeChangeErr, setTypeChangeErr] = useState('');
+
+  // Add zone
+  const [addZoneStep, setAddZoneStep] = useState(null); // null | 'pick' | 'scope'
+  const [pickedZoneId, setPickedZoneId] = useState('');
+  const [pickedMaxEntries, setPickedMaxEntries] = useState('');
+  const [addZoneSaving, setAddZoneSaving] = useState(false);
+  const [addZoneErr, setAddZoneErr] = useState('');
+
+  // Reset sub-flows when ticket changes or drawer re-opens
+  useEffect(() => {
+    if (!open) return;
+    setChangingType(false);
+    setAddZoneStep(null);
+    setTypeChangeErr('');
+    setAddZoneErr('');
+    setPickedZoneId('');
+    setPickedMaxEntries('');
+    setResendJobId(null);
+  }, [open, ticket?.id]);
+
+  // Track single-ticket resend job via STOMP
+  useEffect(() => {
+    if (!resendJobId || !ticket?.id) return;
+    return watchEmailJob(
+      resendJobId,
+      (s) => {
+        if (s.state === 'COMPLETED') {
+          setResending(false);
+          setResendJobId(null);
+          onResendComplete?.(ticket.id);
+        }
+      },
+      (err) => {
+        setResending(false);
+        setResendJobId(null);
+        setResendErr(err);
+      },
+    );
+  }, [resendJobId, ticket?.id]);
+
+  if (!ticket) return null;
+
+  const entitlements = ticket.ticketType?.entitlements ?? [];
+  const allZones = currentEvent?.zones ?? [];
+  const existingZoneIds = new Set(entitlements.map((e) => e.zoneId));
+  const availableZones = allZones.filter((z) => !existingZoneIds.has(z.id));
+
+  // ── resend ──
   async function handleResend() {
     setResending(true);
     setResendErr('');
     try {
-      await onResend(ticket);
+      const { jobId } = await onResend(ticket);
+      setResendJobId(jobId);
+      // resending stays true until STOMP reports COMPLETED
     } catch (ex) {
       setResendErr(ex.message || 'Failed to resend');
-    } finally {
       setResending(false);
     }
   }
+
+  // ── change ticket type ──
+  async function openChangeType() {
+    setChangingType(true);
+    setSelectedTypeId(ticket.ticketType?.id || '');
+    setTypesLoading(true);
+    setTypeChangeErr('');
+    try {
+      const types = await eventsApi.getTicketTypes(ticket.eventId);
+      setAllTypes(types ?? []);
+    } catch {
+      setTypeChangeErr('Failed to load ticket types');
+    } finally {
+      setTypesLoading(false);
+    }
+  }
+
+  async function saveTypeChange() {
+    if (selectedTypeId === ticket.ticketType?.id) { setChangingType(false); return; }
+    setTypeChangeSaving(true);
+    setTypeChangeErr('');
+    try {
+      const updated = await ticketsApi.update(ticket.id, {
+        firstName: ticket.firstName,
+        lastName: ticket.lastName,
+        email: ticket.email,
+        ticketTypeId: selectedTypeId,
+      });
+      onUpdate(updated);
+      setChangingType(false);
+    } catch (ex) {
+      setTypeChangeErr(ex.message || 'Failed to change ticket type');
+    } finally {
+      setTypeChangeSaving(false);
+    }
+  }
+
+  // ── add zone ──
+  async function confirmAddZone(scope) {
+    setAddZoneSaving(true);
+    setAddZoneErr('');
+    const zone = allZones.find((z) => z.id === pickedZoneId);
+    const maxEntries = pickedMaxEntries === '' ? null : parseInt(pickedMaxEntries, 10);
+    const newEnt = { zoneId: pickedZoneId, ...(maxEntries !== null ? { maxEntries } : {}) };
+    const tt = ticket.ticketType;
+    const existingEnts = (tt?.entitlements ?? []).map((e) => ({
+      zoneId: e.zoneId,
+      ...(e.maxEntries != null ? { maxEntries: e.maxEntries } : {}),
+    }));
+
+    try {
+      if (scope === 'all') {
+        await zoneTypesApi.updateTicketType(tt.id, {
+          name: tt.name, price: tt.price, isActive: tt.isActive,
+          entitlements: [...existingEnts, newEnt],
+        });
+        const updated = await ticketsApi.get(ticket.id);
+        onUpdate(updated);
+      } else {
+        const newType = await eventsApi.createTicketType(ticket.eventId, {
+          name: `${tt?.name ?? 'Custom'} +${zone?.name ?? 'Zone'}`,
+          price: tt?.price ?? 0,
+          isActive: true,
+          entitlements: [...existingEnts, newEnt],
+        });
+        const updated = await ticketsApi.update(ticket.id, {
+          firstName: ticket.firstName,
+          lastName: ticket.lastName,
+          email: ticket.email,
+          ticketTypeId: newType.id,
+        });
+        onUpdate(updated);
+      }
+      setAddZoneStep(null);
+      setPickedZoneId('');
+      setPickedMaxEntries('');
+    } catch (ex) {
+      setAddZoneErr(ex.message || 'Failed to add zone');
+    } finally {
+      setAddZoneSaving(false);
+    }
+  }
+
+  const sectionLabel = {
+    fontSize: 11, fontWeight: 500, color: 'var(--text-3)',
+    textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8,
+  };
 
   return (
     <Drawer open={open} onClose={onClose} width={440}>
@@ -98,11 +242,10 @@ function TicketDrawer({ ticket, open, onClose, onResend }) {
         onClose={onClose}
       />
       <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
         {/* Ticket ID */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-            Ticket ID
-          </div>
+          <div style={sectionLabel}>Ticket ID</div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'var(--surface-3)', border: '1px solid var(--border)',
@@ -121,24 +264,61 @@ function TicketDrawer({ ticket, open, onClose, onResend }) {
 
         {/* Ticket type */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-            Ticket Type
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TypePill ticketType={ticket.ticketType} />
-            {ticket.ticketType?.price != null && (
-              <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
-                ${Number(ticket.ticketType.price).toFixed(2)}
-              </span>
-            )}
-          </div>
+          <div style={sectionLabel}>Ticket Type</div>
+          {changingType ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {typesLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-3)', fontSize: 13 }}>
+                  <Spinner size={14} dark /> Loading types…
+                </div>
+              ) : (
+                <select
+                  className="inp"
+                  value={selectedTypeId}
+                  onChange={(e) => setSelectedTypeId(e.target.value)}
+                >
+                  {allTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · ${Number(t.price).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {typeChangeErr && (
+                <div style={{ fontSize: 12, color: 'var(--red)', display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <Icon name="alert" size={12} color="var(--red)" /> {typeChangeErr}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button variant="primary" size="sm" onClick={saveTypeChange} disabled={typeChangeSaving || typesLoading || !selectedTypeId}>
+                  {typeChangeSaving ? <Spinner size={12} /> : 'Save'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setChangingType(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TypePill ticketType={ticket.ticketType} />
+              {ticket.ticketType?.price != null && (
+                <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
+                  ${Number(ticket.ticketType.price).toFixed(2)}
+                </span>
+              )}
+              <button
+                onClick={openChangeType}
+                style={{ all: 'unset', cursor: 'pointer', marginLeft: 'auto', fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-3)'; }}
+              >
+                <Icon name="edit" size={12} /> Change
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Email */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-            Email
-          </div>
+          <div style={sectionLabel}>Email</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, color: 'var(--text)' }}>
             <Icon name="mail" size={14} color="var(--text-3)" />
             {ticket.email}
@@ -147,9 +327,7 @@ function TicketDrawer({ ticket, open, onClose, onResend }) {
 
         {/* Ticket delivery */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-            Ticket Delivery
-          </div>
+          <div style={sectionLabel}>Ticket Delivery</div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'var(--surface-2)', border: '1px solid var(--border)',
@@ -174,23 +352,29 @@ function TicketDrawer({ ticket, open, onClose, onResend }) {
           )}
         </div>
 
-        {/* Zone entitlements */}
-        {entitlements.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-              Zone Access
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Zone access */}
+        <div>
+          <div style={{ ...sectionLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span>Zone Access</span>
+            {addZoneStep === null && !changingType && (
+              <button
+                onClick={() => setAddZoneStep('pick')}
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 11, color: 'var(--orange)', display: 'flex', alignItems: 'center', gap: 3, textTransform: 'none', letterSpacing: 0 }}
+              >
+                <Icon name="plus" size={11} color="var(--orange)" /> Add zone
+              </button>
+            )}
+          </div>
+
+          {entitlements.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: addZoneStep ? 12 : 0 }}>
               {entitlements.map((ent) => (
                 <div key={ent.zoneId} style={{
                   display: 'flex', alignItems: 'center', gap: 9,
                   padding: '8px 10px', background: 'var(--surface-2)',
                   border: '1px solid var(--border)', borderRadius: 'var(--r)',
                 }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: zoneColor(ent.zoneId), flexShrink: 0,
-                  }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: zoneColor(ent.zoneId), flexShrink: 0 }} />
                   <span style={{ fontSize: 13, flex: 1 }}>{ent.zoneName}</span>
                   <Badge color="var(--text-2)" bg="var(--surface-3)">
                     {ent.maxEntries == null ? '∞' : `${ent.maxEntries}×`}
@@ -198,14 +382,107 @@ function TicketDrawer({ ticket, open, onClose, onResend }) {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {entitlements.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-            No zone entitlements on this ticket type.
-          </div>
-        )}
+          {entitlements.length === 0 && addZoneStep === null && (
+            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No zone entitlements on this ticket type.</div>
+          )}
+
+          {/* Step 1: pick zone + max entries */}
+          {addZoneStep === 'pick' && (
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Add zone access</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <select className="inp" value={pickedZoneId} onChange={(e) => setPickedZoneId(e.target.value)} disabled={availableZones.length === 0}>
+                  <option value="">
+                    {availableZones.length === 0 ? 'All zones already assigned' : 'Select zone…'}
+                  </option>
+                  {availableZones.map((z) => (
+                    <option key={z.id} value={z.id}>{z.name}</option>
+                  ))}
+                </select>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>
+                    Max entries <span style={{ color: 'var(--text-3)' }}>(blank = unlimited)</span>
+                  </label>
+                  <input
+                    className="inp"
+                    type="number"
+                    min="1"
+                    placeholder="Unlimited"
+                    value={pickedMaxEntries}
+                    onChange={(e) => setPickedMaxEntries(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button variant="ghost" size="sm" onClick={() => setAddZoneStep(null)}>Cancel</Button>
+                  <Button variant="primary" size="sm" onClick={() => setAddZoneStep('scope')} disabled={!pickedZoneId || availableZones.length === 0}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: choose scope */}
+          {addZoneStep === 'scope' && (
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 14 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
+                Adding <strong style={{ color: 'var(--text)' }}>{allZones.find((z) => z.id === pickedZoneId)?.name}</strong> — who should this apply to?
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                <button
+                  onClick={() => confirmAddZone('all')}
+                  disabled={addZoneSaving}
+                  style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: 'var(--r)', border: '1px solid var(--border)', background: 'var(--surface)', transition: 'border-color .12s, background .12s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.background = 'var(--orange-softer)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; }}
+                >
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--orange-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="users" size={14} color="var(--orange)" />
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3 }}>
+                    All {ticket.ticketType?.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                    Updates zone access for every holder of this ticket type
+                  </div>
+                </button>
+                <button
+                  onClick={() => confirmAddZone('individual')}
+                  disabled={addZoneSaving}
+                  style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: 'var(--r)', border: '1px solid var(--border)', background: 'var(--surface)', transition: 'border-color .12s, background .12s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--blue)'; e.currentTarget.style.background = 'var(--blue-soft)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; }}
+                >
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--blue-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="user" size={14} color="var(--blue)" />
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3 }}>
+                    {ticket.firstName} only
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                    Clones this ticket type with the new zone just for them
+                  </div>
+                </button>
+              </div>
+              {addZoneErr && (
+                <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <Icon name="alert" size={12} color="var(--red)" /> {addZoneErr}
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Button variant="ghost" size="sm" onClick={() => setAddZoneStep('pick')} disabled={addZoneSaving}>← Back</Button>
+                {addZoneSaving && (
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Spinner size={12} dark /> Applying…
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </Drawer>
   );
@@ -408,12 +685,23 @@ export default function Attendees() {
       .catch(() => {});
   }
 
-  // Single-ticket resend from the drawer; patches the row in place so the
-  // delivery status updates without a full reload.
+  // Single-ticket resend — kicks off async job, returns { jobId } for STOMP tracking in drawer.
   async function handleResend(ticket) {
-    const updated = await ticketsApi.resend(ticket.id);
-    setAllTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, ...updated } : t)));
-    setSelected((cur) => (cur && cur.id === ticket.id ? { ...cur, ...updated } : cur));
+    return ticketsApi.resend(ticket.id);
+  }
+
+  // Called by the drawer once the STOMP job reports COMPLETED; refreshes the row.
+  async function handleResendComplete(ticketId) {
+    try {
+      const updated = await ticketsApi.get(ticketId);
+      setAllTickets((prev) => prev.map((t) => (t.id === ticketId ? { ...t, ...updated } : t)));
+      setSelected((cur) => (cur && cur.id === ticketId ? { ...cur, ...updated } : cur));
+    } catch {}
+  }
+
+  function handleTicketUpdated(updated) {
+    setAllTickets((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+    setSelected((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur));
   }
 
   const typeOptions = useMemo(() => {
@@ -606,6 +894,8 @@ export default function Attendees() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onResend={handleResend}
+        onResendComplete={handleResendComplete}
+        onUpdate={handleTicketUpdated}
       />
 
       {/* Bulk Send Wizard */}

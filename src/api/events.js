@@ -27,9 +27,8 @@ export const eventsApi = {
   getTickets: (id, page = 0, size = 50) =>
     api.get(`/events/${id}/tickets?page=${page}&size=${size}`),
 
-  // Bulk ticket delivery. Both return TicketDeliveryResponse { total, sent, failed }.
-  // resendTickets: (re)sends to every attendee in the event.
-  // sendMissingTickets: sends only to attendees who never received their ticket.
+  // Bulk ticket delivery. Both return EmailJobAccepted { jobId, total }.
+  // Track progress via STOMP: /topic/email-jobs/{jobId}
   resendTickets: (id) => api.post(`/events/${id}/tickets/resend`),
   sendMissingTickets: (id) => api.post(`/events/${id}/tickets/send-missing`),
 

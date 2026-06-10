@@ -4,16 +4,7 @@ import Icon from './ui/Icon';
 import Button from './ui/Button';
 import Spinner from './ui/Spinner';
 import Portal from './ui/Portal';
-
-/**
- * Bulk ticket-send flow with deliberate guard rails. Sending real email to
- * every attendee is irreversible, so the user passes through three distinct
- * confirmation gates before anything is sent:
- *   1. Scope     — choose who receives email, see the recipient count.
- *   2. Acknowledge — explicitly tick that this sends real email.
- *   3. Confirm   — type the exact recipient count to arm the send button.
- * A fourth screen reports the delivery result.
- */
+import EmailJobProgress from './EmailJobProgress';
 
 const SCOPES = {
   all: {
@@ -96,8 +87,12 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
   const [ack, setAck] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+
+  // Async job state — set once the server accepts the request
+  const [jobId, setJobId] = useState(null);
+  const [jobTotal, setJobTotal] = useState(0);
+  const [result, setResult] = useState(null); // final EmailJobStatus
 
   const counts = useMemo(() => {
     const total = tickets.length;
@@ -108,28 +103,27 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
   const scope = SCOPES[scopeId];
   const recipientCount = counts[scopeId] ?? 0;
   const confirmed = confirmText.trim() === String(recipientCount);
+  const isDone = step === 3 && result !== null;
 
   async function handleSend() {
     setSending(true);
     setError('');
     try {
-      const res = await scope.endpoint(eventId);
-      setResult(res);
+      const accepted = await scope.endpoint(eventId);
+      setJobId(accepted.jobId);
+      setJobTotal(accepted.total ?? recipientCount);
       setStep(3);
     } catch (ex) {
-      setError(ex.message || 'Failed to send tickets');
+      setError(ex.message || 'Failed to start send job');
     } finally {
       setSending(false);
     }
   }
 
   function close() {
-    // Tell the parent to refresh if anything was actually sent.
     if (result) onDone?.(result);
     else onClose();
   }
-
-  const isLast = step === 3;
 
   return (
     <Portal>
@@ -139,7 +133,7 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
         background: 'rgba(20,20,24,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
-      onClick={isLast ? undefined : onClose}
+      onClick={isDone ? undefined : (step < 3 ? onClose : undefined)}
     >
       <div
         className="card pop-in"
@@ -160,7 +154,7 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
             </div>
             <span style={{ fontSize: 14, fontWeight: 600 }}>Send tickets</span>
           </div>
-          {!isLast && <Button variant="subtle" icon="x" onClick={onClose} />}
+          {step < 3 && <Button variant="subtle" icon="x" onClick={onClose} />}
         </div>
 
         <div style={{ padding: '22px 24px', minHeight: 240, display: 'flex', flexDirection: 'column' }}>
@@ -258,7 +252,16 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
             </div>
           )}
 
-          {/* Step 3 — result */}
+          {/* Step 3 — live progress (job running) */}
+          {step === 3 && !result && jobId && (
+            <EmailJobProgress
+              jobId={jobId}
+              total={jobTotal}
+              onComplete={(s) => setResult(s)}
+            />
+          )}
+
+          {/* Step 3 — final result (job completed) */}
           {step === 3 && result && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
               <div style={{
@@ -296,12 +299,21 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)',
         }}>
-          {isLast ? <span /> : <Dots step={step} total={3} />}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {isLast ? (
+          {isDone ? (
+            <>
+              <span />
               <Button variant="primary" icon="check" onClick={close}>Done</Button>
-            ) : (
-              <>
+            </>
+          ) : step === 3 ? (
+            // Job running — no controls
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-3)', fontSize: 12.5 }}>
+              <Spinner size={13} />
+              Sending in progress…
+            </div>
+          ) : (
+            <>
+              <Dots step={step} total={3} />
+              <div style={{ display: 'flex', gap: 8 }}>
                 {step > 0 && (
                   <Button variant="ghost" icon="arrowleft" onClick={() => setStep((s) => s - 1)} disabled={sending}>Back</Button>
                 )}
@@ -313,12 +325,12 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
                 )}
                 {step === 2 && (
                   <Button variant="primary" icon={sending ? undefined : 'mail'} onClick={handleSend} disabled={!confirmed || sending}>
-                    {sending ? <><Spinner size={14} /> Sending…</> : `Send ${recipientCount} email${recipientCount !== 1 ? 's' : ''}`}
+                    {sending ? <><Spinner size={14} /> Starting…</> : `Send ${recipientCount} email${recipientCount !== 1 ? 's' : ''}`}
                   </Button>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
