@@ -10,13 +10,11 @@ import Spinner from '../../components/ui/Spinner';
 import Icon from '../../components/ui/Icon';
 import StatusBadge from '../../components/StatusBadge';
 import Empty from '../../components/ui/Empty';
+import { ORDER_STATUS, ORDER_STATUS_TABS, orderStatusLabel } from '../../lib/orderStatus';
 
 const TABS = [
-  { id: 'ALL',       label: 'All' },
-  { id: 'PAID',      label: 'Paid' },
-  { id: 'PENDING',   label: 'Pending' },
-  { id: 'CANCELLED', label: 'Cancelled' },
-  { id: 'EXPIRED',   label: 'Expired' },
+  { id: 'ALL', label: 'All' },
+  ...ORDER_STATUS_TABS.map((id) => ({ id, label: orderStatusLabel(id) })),
 ];
 
 function formatDate(iso) {
@@ -27,21 +25,43 @@ function formatDate(iso) {
     + ' ' + d.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' });
 }
 
-function OrderDrawer({ order, open, onClose, onRefresh }) {
-  const [confirming, setConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState('');
+function ActionError({ msg }) {
+  return (
+    <div style={{ color: 'var(--red)', fontSize: 12.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <Icon name="alert" size={13} color="var(--red)" />
+      {msg}
+    </div>
+  );
+}
 
-  async function handleConfirm() {
-    setConfirming(true);
-    setConfirmError('');
+function OrderDrawer({ order, open, onClose, onUpdated }) {
+  // Which action is currently running (by id), shared error, and the two
+  // multi-step confirmations (deny funds choice + refund confirm).
+  const [busy, setBusy] = useState(null);
+  const [actionError, setActionError] = useState('');
+  const [denyOpen, setDenyOpen] = useState(false);
+  const [refundConfirm, setRefundConfirm] = useState(false);
+
+  // Reset transient UI whenever the drawer opens or the order changes.
+  useEffect(() => {
+    setBusy(null);
+    setActionError('');
+    setDenyOpen(false);
+    setRefundConfirm(false);
+  }, [open, order?.id]);
+
+  // Run an action, then fold the returned order back into list + drawer so the
+  // new status (and its available actions) render immediately.
+  async function run(id, fn) {
+    setBusy(id);
+    setActionError('');
     try {
-      await ordersApi.confirmPayment(order.id);
-      onRefresh();
-      onClose();
+      const updated = await fn();
+      if (updated) onUpdated(updated);
     } catch (ex) {
-      setConfirmError(ex.message || 'Failed to confirm payment');
+      setActionError(ex.message || 'Action failed');
     } finally {
-      setConfirming(false);
+      setBusy(null);
     }
   }
 
@@ -138,8 +158,73 @@ function OrderDrawer({ order, open, onClose, onRefresh }) {
           </div>
         </div>
 
-        {/* Actions */}
-        {order.status === 'PENDING' && (
+        {/* ── Quarantine review ── */}
+        {order.status === ORDER_STATUS.QUARANTINED && (
+          <div style={{
+            background: 'var(--purple-soft)', border: '1px solid rgba(124,92,255,0.25)',
+            borderRadius: 'var(--r)', padding: '14px 16px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="alert" size={13} color="var(--purple)" />
+              Held for review
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
+              This order was quarantined and needs a manual decision before tickets are issued.
+            </div>
+            {actionError && <ActionError msg={actionError} />}
+
+            {!denyOpen ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button
+                  variant="primary"
+                  icon={busy === 'approve' ? undefined : 'check'}
+                  onClick={() => run('approve', () => ordersApi.approveQuarantine(order.id))}
+                  disabled={!!busy}
+                >
+                  {busy === 'approve' ? <><Spinner size={14} /> Approving…</> : 'Approve & issue'}
+                </Button>
+                <Button variant="ghost" onClick={() => { setActionError(''); setDenyOpen(true); }} disabled={!!busy}>
+                  Deny…
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                  Were funds received for this order?
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+                  If funds were received, the order is queued for a refund. Otherwise it's voided.
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="primary"
+                    onClick={() => run('deny', () => ordersApi.denyQuarantine(order.id, true))}
+                    disabled={!!busy}
+                  >
+                    {busy === 'deny' ? <Spinner size={14} /> : 'Funds received → refund'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => run('deny', () => ordersApi.denyQuarantine(order.id, false))}
+                    disabled={!!busy}
+                  >
+                    No funds — void
+                  </Button>
+                </div>
+                <button
+                  onClick={() => setDenyOpen(false)}
+                  disabled={!!busy}
+                  style={{ all: 'unset', cursor: 'pointer', fontSize: 11.5, color: 'var(--text-3)', marginTop: 10, display: 'inline-block' }}
+                >
+                  ← Back
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Awaiting manual payment ── */}
+        {order.status === ORDER_STATUS.AWAITING_PAYMENT && (
           <div style={{
             background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
             borderRadius: 'var(--r)', padding: '14px 16px',
@@ -150,27 +235,77 @@ function OrderDrawer({ order, open, onClose, onRefresh }) {
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
               Confirm that you have received payment for this order.
             </div>
-            {confirmError && (
-              <div style={{ color: 'var(--red)', fontSize: 12.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="alert" size={13} color="var(--red)" />
-                {confirmError}
-              </div>
-            )}
+            {actionError && <ActionError msg={actionError} />}
             <Button
               variant="primary"
-              onClick={handleConfirm}
-              disabled={confirming}
-              icon={confirming ? undefined : 'check'}
+              onClick={() => run('confirm', () => ordersApi.confirmPayment(order.id))}
+              disabled={!!busy}
+              icon={busy === 'confirm' ? undefined : 'check'}
             >
-              {confirming ? <><Spinner size={14} /> Confirming…</> : 'Confirm payment received'}
+              {busy === 'confirm' ? <><Spinner size={14} /> Confirming…</> : 'Confirm payment received'}
             </Button>
           </div>
         )}
 
-        {order.status === 'PAID' && (
-          <Button variant="ghost" icon="mail" onClick={() => alert('Coming soon')}>
-            Resend tickets
-          </Button>
+        {/* ── Paid: resend or refund ── */}
+        {order.status === ORDER_STATUS.PAID && (
+          !refundConfirm ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="ghost" icon="mail" onClick={() => alert('Coming soon')}>
+                Resend tickets
+              </Button>
+              <Button variant="ghost" onClick={() => { setActionError(''); setRefundConfirm(true); }} disabled={!!busy}>
+                Refund
+              </Button>
+            </div>
+          ) : (
+            <div style={{
+              background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.25)',
+              borderRadius: 'var(--r)', padding: '14px 16px',
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>
+                Refund this order?
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
+                The order moves to <strong>Refund pending</strong>. Issue the refund through your payment provider, then mark it complete.
+              </div>
+              {actionError && <ActionError msg={actionError} />}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button
+                  variant="primary"
+                  onClick={() => run('refund', () => ordersApi.refund(order.id))}
+                  disabled={!!busy}
+                >
+                  {busy === 'refund' ? <Spinner size={14} /> : `Refund ${money(order.amountTotal || 0)}`}
+                </Button>
+                <Button variant="ghost" onClick={() => setRefundConfirm(false)} disabled={!!busy}>Cancel</Button>
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ── Refund in progress ── */}
+        {order.status === ORDER_STATUS.REFUND_PENDING && (
+          <div style={{
+            background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
+            borderRadius: 'var(--r)', padding: '14px 16px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>
+              Refund in progress
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
+              Once you've issued the refund through your payment provider, mark it settled.
+            </div>
+            {actionError && <ActionError msg={actionError} />}
+            <Button
+              variant="primary"
+              icon={busy === 'completeRefund' ? undefined : 'check'}
+              onClick={() => run('completeRefund', () => ordersApi.completeRefund(order.id))}
+              disabled={!!busy}
+            >
+              {busy === 'completeRefund' ? <><Spinner size={14} /> Completing…</> : 'Mark refund complete'}
+            </Button>
+          </div>
         )}
       </div>
     </Drawer>
@@ -213,6 +348,13 @@ export default function Orders() {
   function openDrawer(order) {
     setSelected(order);
     setDrawerOpen(true);
+  }
+
+  // Fold an action's updated order back into the list + open drawer so the new
+  // status (and its tab/count) reflect immediately without a full reload.
+  function handleOrderUpdated(updated) {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+    setSelected((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur));
   }
 
   if (loading) {
@@ -310,7 +452,7 @@ export default function Orders() {
         order={selected}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        onRefresh={loadOrders}
+        onUpdated={handleOrderUpdated}
       />
     </div>
   );

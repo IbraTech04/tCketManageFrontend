@@ -16,8 +16,10 @@ import Icon from '../../components/ui/Icon';
 import Badge from '../../components/ui/Badge';
 import Portal from '../../components/ui/Portal';
 import TypePill from '../../components/TypePill';
+import StatusBadge from '../../components/StatusBadge';
 import ImportWizard from '../../components/ImportWizard';
 import SendTicketsWizard from '../../components/SendTicketsWizard';
+import { isRevoked } from '../../lib/ticketStatus';
 
 function relTime(iso) {
   if (!iso) return null;
@@ -79,6 +81,10 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
   const [resendErr, setResendErr] = useState('');
   const [resendJobId, setResendJobId] = useState(null);
 
+  // Revoke / reactivate
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusErr, setStatusErr] = useState('');
+
   // Change ticket type
   const [changingType, setChangingType] = useState(false);
   const [allTypes, setAllTypes] = useState([]);
@@ -104,6 +110,7 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
     setPickedZoneId('');
     setPickedMaxEntries('');
     setResendJobId(null);
+    setStatusErr('');
   }, [open, ticket?.id]);
 
   // Track single-ticket resend job via STOMP
@@ -144,6 +151,22 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
     } catch (ex) {
       setResendErr(ex.message || 'Failed to resend');
       setResending(false);
+    }
+  }
+
+  // ── revoke / reactivate ──
+  async function handleRevokeToggle() {
+    setStatusBusy(true);
+    setStatusErr('');
+    try {
+      const updated = isRevoked(ticket.status)
+        ? await ticketsApi.reactivate(ticket.id)
+        : await ticketsApi.revoke(ticket.id);
+      onUpdate(updated);
+    } catch (ex) {
+      setStatusErr(ex.message || 'Failed to update ticket status');
+    } finally {
+      setStatusBusy(false);
     }
   }
 
@@ -260,6 +283,39 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
               <Icon name="copy" size={14} />
             </button>
           </div>
+        </div>
+
+        {/* Status — revoke / reactivate */}
+        <div>
+          <div style={sectionLabel}>Status</div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--r)', padding: '10px 12px',
+          }}>
+            <div style={{ flex: 1 }}>
+              <StatusBadge status={ticket.status || 'ACTIVE'} />
+              {isRevoked(ticket.status) && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 5 }}>
+                  This ticket won't admit the holder until reactivated.
+                </div>
+              )}
+            </div>
+            <Button
+              variant={isRevoked(ticket.status) ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={handleRevokeToggle}
+              disabled={statusBusy}
+              style={isRevoked(ticket.status) ? undefined : { color: 'var(--red)' }}
+            >
+              {statusBusy ? <Spinner size={13} /> : isRevoked(ticket.status) ? 'Reactivate' : 'Revoke'}
+            </Button>
+          </div>
+          {statusErr && (
+            <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="alert" size={12} color="var(--red)" /> {statusErr}
+            </div>
+          )}
         </div>
 
         {/* Ticket type */}
@@ -834,8 +890,9 @@ export default function Attendees() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Avatar name={`${ticket.firstName} ${ticket.lastName}`} size={30} />
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 7 }}>
                             {ticket.firstName} {ticket.lastName}
+                            {isRevoked(ticket.status) && <StatusBadge status={ticket.status} />}
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{ticket.email}</div>
                         </div>

@@ -1,8 +1,11 @@
+import { ORDER_STATUS_META } from '../lib/orderStatus';
+import { TICKET_STATUS_META } from '../lib/ticketStatus';
+
 const STYLES = {
-  PAID:              { c: 'var(--green)',  bg: 'var(--green-soft)',  label: 'Paid' },
-  PENDING:           { c: 'var(--amber)',  bg: 'var(--amber-soft)',  label: 'Pending' },
-  CANCELLED:         { c: 'var(--red)',    bg: 'var(--red-soft)',    label: 'Cancelled' },
-  EXPIRED:           { c: 'var(--text-3)',bg: 'var(--surface-3)',   label: 'Expired' },
+  // Order statuses (mirror the backend OrderStatus enum, see lib/orderStatus.js)
+  ...ORDER_STATUS_META,
+  // Ticket statuses (see lib/ticketStatus.js)
+  ...TICKET_STATUS_META,
   ALLOWED:           { c: 'var(--green)',  bg: 'var(--green-soft)',  label: 'Allowed' },
   DENIED:            { c: 'var(--red)',    bg: 'var(--red-soft)',    label: 'Denied' },
   LIMIT:             { c: 'var(--amber)',  bg: 'var(--amber-soft)',  label: 'Limit reached' },
