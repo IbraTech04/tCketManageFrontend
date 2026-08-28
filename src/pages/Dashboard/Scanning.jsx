@@ -152,7 +152,7 @@ export default function Scanning() {
     <div className="fade-in page-content">
       {error && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 16px', color: 'var(--red)', fontSize: 13,
           marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8,
         }}>

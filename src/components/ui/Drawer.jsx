@@ -6,7 +6,7 @@ export default function Drawer({ open, onClose, children, width = 440 }) {
       <div
         onClick={onClose}
         style={{
-          position: 'fixed', inset: 0, background: 'rgba(20,20,24,0.32)',
+          position: 'fixed', inset: 0, background: 'var(--overlay)',
           opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none',
           transition: 'opacity .2s', zIndex: 40,
         }}

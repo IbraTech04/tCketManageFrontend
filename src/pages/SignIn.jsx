@@ -1,23 +1,41 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import Icon from '../components/ui/Icon';
+import Spinner from '../components/ui/Spinner';
+import { useApp } from '../contexts/AppContext';
 
 export default function SignIn() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login, isAuthenticated, error, clearError } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e) {
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(location.state?.from?.pathname || '/events', { replace: true });
+    }
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => clearError(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    // JWT auth not yet wired — form is UI-complete only
+    setSubmitting(true);
+    const result = await login(email, password);
+    setSubmitting(false);
+    if (result.success) {
+      navigate(location.state?.from?.pathname || '/events', { replace: true });
+    }
   }
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0d0e11',
+      background: 'var(--bg)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -26,22 +44,7 @@ export default function SignIn() {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 36 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: 11,
-            background: 'var(--orange)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 16px rgba(255,106,26,0.45)',
-          }}>
-            <Icon name="ticket" size={24} color="#fff" stroke={2.2} />
-          </div>
-          <span style={{
-            fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em',
-            color: '#f4f4f5',
-          }}>
-            t<span style={{ color: 'var(--orange)' }}>C</span>ketManage
-          </span>
-        </div>
+        <Logo size={42} gap={12} wordmarkSize={22} wordmarkWeight={700} color="var(--text)" />
       </div>
 
       {/* Card */}
@@ -51,7 +54,7 @@ export default function SignIn() {
         padding: '40px',
         width: '100%',
         maxWidth: 400,
-        boxShadow: '0 24px 64px -16px rgba(0,0,0,0.55)',
+        boxShadow: 'var(--shadow-pop)',
         border: '1px solid var(--border)',
       }}>
         {/* Heading */}
@@ -74,6 +77,25 @@ export default function SignIn() {
             Sign in to your organizer account
           </p>
         </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            marginBottom: 16,
+            padding: '10px 13px',
+            background: 'var(--red-soft)',
+            borderRadius: 'var(--r)',
+            border: '1px solid var(--red-border)',
+            display: 'flex',
+            gap: 9,
+            alignItems: 'flex-start',
+          }}>
+            <Icon name="alert" size={14} color="var(--red)" style={{ marginTop: 1, flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--red)', lineHeight: 1.5 }}>
+              {error}
+            </p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -130,63 +152,19 @@ export default function SignIn() {
           <button
             type="submit"
             className="btn btn-primary"
+            disabled={submitting}
             style={{
               width: '100%', height: 44, fontSize: 14,
               fontWeight: 600, marginTop: 4,
               justifyContent: 'center',
               borderRadius: 'var(--r)',
+              gap: 8,
+              opacity: submitting ? 0.7 : 1,
             }}
           >
-            Sign in
+            {submitting ? <Spinner size={16} /> : 'Sign in'}
           </button>
         </form>
-
-        {/* Divider */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          margin: '20px 0',
-        }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>or</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
-
-        {/* Continue without signing in */}
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => navigate('/events')}
-          style={{
-            width: '100%', height: 40, fontSize: 13.5,
-            justifyContent: 'center', gap: 8,
-            borderRadius: 'var(--r)',
-          }}
-        >
-          Continue without signing in
-          <Icon name="arrowright" size={15} />
-        </button>
-
-        {/* Notice */}
-        <div style={{
-          marginTop: 20,
-          padding: '10px 13px',
-          background: 'var(--surface-3)',
-          borderRadius: 'var(--r)',
-          border: '1px solid var(--border)',
-          display: 'flex',
-          gap: 9,
-          alignItems: 'flex-start',
-        }}>
-          <Icon name="info" size={14} color="var(--text-3)" style={{ marginTop: 1, flexShrink: 0 }} />
-          <p style={{
-            margin: 0,
-            fontSize: 12,
-            color: 'var(--text-3)',
-            lineHeight: 1.55,
-          }}>
-            Authentication is being finalized. Continue without signing in to use the dashboard.
-          </p>
-        </div>
       </div>
     </div>
   );

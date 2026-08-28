@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>tCketManage</title>
+    <!-- Apply the stored theme before first paint so dark-mode users never see
+         a light flash. Kept inline and dependency-free on purpose; the same key
+         and values are owned by src/lib/theme.js. localStorage throws outright
+         in some privacy modes, hence the catch. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('tm-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) { /* no stored preference available — fall back to the OS */ }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />

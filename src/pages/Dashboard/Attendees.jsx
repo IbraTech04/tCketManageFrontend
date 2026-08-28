@@ -223,6 +223,8 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
       if (scope === 'all') {
         await zoneTypesApi.updateTicketType(tt.id, {
           name: tt.name, price: tt.price, isActive: tt.isActive,
+          // PUT replaces the type — preserve its purchasing window.
+          salesStartAt: tt.salesStartAt ?? null, salesEndAt: tt.salesEndAt ?? null,
           entitlements: [...existingEnts, newEnt],
         });
         const updated = await ticketsApi.get(ticket.id);
@@ -232,6 +234,8 @@ function TicketDrawer({ ticket, open, onClose, onResend, onResendComplete, onUpd
           name: `${tt?.name ?? 'Custom'} +${zone?.name ?? 'Zone'}`,
           price: tt?.price ?? 0,
           isActive: true,
+          // Inherit the source type's purchasing window for this derived variant.
+          salesStartAt: tt?.salesStartAt ?? null, salesEndAt: tt?.salesEndAt ?? null,
           entitlements: [...existingEnts, newEnt],
         });
         const updated = await ticketsApi.update(ticket.id, {
@@ -597,7 +601,7 @@ function AddAttendeeModal({ eventId, onClose, onCreated }) {
     <Portal>
     <div style={{
       position: 'fixed', inset: 0, zIndex: 50,
-      background: 'rgba(20,20,24,0.4)',
+      background: 'var(--overlay)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24,
     }}
@@ -839,7 +843,7 @@ export default function Attendees() {
 
       {error && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 16px',
           color: 'var(--red)', fontSize: 13, marginBottom: 14,
           display: 'flex', alignItems: 'center', gap: 8,

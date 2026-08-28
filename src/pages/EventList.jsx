@@ -7,6 +7,7 @@ import Icon from '../components/ui/Icon';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
+import ThemeToggle from '../components/ui/ThemeToggle';
 import EventWizard from '../components/EventWizard';
 
 function formatEventDate(isoString) {
@@ -228,6 +229,7 @@ export default function EventList() {
       }}>
         <Logo size={26} />
         <div style={{ display: 'flex', gap: 8 }}>
+          <ThemeToggle variant="ghost" />
           <Button
             variant="ghost"
             icon="scan"
@@ -280,7 +282,7 @@ export default function EventList() {
         {/* Error */}
         {!loading && error && (
           <div style={{
-            background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+            background: 'var(--red-soft)', border: '1px solid var(--red-border)',
             borderRadius: 'var(--r-lg)', padding: '16px 20px',
             display: 'flex', alignItems: 'center', gap: 10,
             color: 'var(--red)', fontSize: 13.5,

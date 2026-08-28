@@ -49,8 +49,8 @@ function StepRailHoriz({ current }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
               <div style={{
                 width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                background: done ? 'var(--green)' : active ? 'var(--orange)' : 'var(--surface-3)',
-                border: `2px solid ${done ? 'var(--green)' : active ? 'var(--orange)' : 'var(--border-2)'}`,
+                background: done ? 'var(--green-fill)' : active ? 'var(--orange)' : 'var(--surface-3)',
+                border: `2px solid ${done ? 'var(--green-fill)' : active ? 'var(--orange)' : 'var(--border-2)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all .15s',
               }}>
@@ -310,7 +310,7 @@ function StepReview({ rows, mapping, hasHeader, errors }) {
 
       {errorRows.length > 0 && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 14px',
         }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>Validation errors</div>
@@ -466,7 +466,7 @@ export default function ImportWizard({ onClose, onDone }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 50,
-      background: 'rgba(20,20,24,0.5)',
+      background: 'var(--overlay)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '24px',
     }}

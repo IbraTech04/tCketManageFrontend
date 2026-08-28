@@ -122,7 +122,7 @@ export default function EmailJobProgress({ jobId, total, onComplete, onError }) 
       {connErr && (
         <div style={{
           display: 'flex', gap: 8, padding: '9px 12px',
-          background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.22)',
+          background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
           borderRadius: 'var(--r)', color: 'var(--amber)', fontSize: 12.5,
         }}>
           <Icon name="alert" size={14} color="var(--amber)" />

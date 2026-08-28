@@ -161,7 +161,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
         {/* ── Quarantine review ── */}
         {order.status === ORDER_STATUS.QUARANTINED && (
           <div style={{
-            background: 'var(--purple-soft)', border: '1px solid rgba(124,92,255,0.25)',
+            background: 'var(--purple-soft)', border: '1px solid var(--purple-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -226,7 +226,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
         {/* ── Awaiting manual payment ── */}
         {order.status === ORDER_STATUS.AWAITING_PAYMENT && (
           <div style={{
-            background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
+            background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>
@@ -260,7 +260,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
             </div>
           ) : (
             <div style={{
-              background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.25)',
+              background: 'var(--red-soft)', border: '1px solid var(--red-border)',
               borderRadius: 'var(--r)', padding: '14px 16px',
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>
@@ -287,7 +287,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
         {/* ── Refund in progress ── */}
         {order.status === ORDER_STATUS.REFUND_PENDING && (
           <div style={{
-            background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
+            background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>
@@ -370,7 +370,7 @@ export default function Orders() {
     <div className="fade-in page-content">
       {error && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 16px', color: 'var(--red)', fontSize: 13,
           marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8,
         }}>
