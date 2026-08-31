@@ -34,6 +34,115 @@ function ActionError({ msg }) {
   );
 }
 
+/**
+ * The provider-side payment reference, shown inline and editable in place.
+ *
+ * For Interac this is the reference number printed on the e-Transfer notification.
+ * It fills itself in when the mailbox listener matches a payment to the order; this
+ * row exists for when it didn't — the buyer mistyped the memo code, left it out, or
+ * the listener was down — so an operator can attach it after the fact.
+ *
+ * Editing is deliberately available at any status, including PAID: correcting a
+ * mistyped reference on a settled order is bookkeeping, and the endpoint behind it
+ * changes no status and re-issues no tickets.
+ */
+function ProviderRefRow({ order, onUpdated }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Drop any in-progress edit when the drawer switches to another order, so a
+  // half-typed reference can't be saved against the wrong one.
+  useEffect(() => {
+    setEditing(false);
+    setDraft('');
+    setError('');
+  }, [order?.id]);
+
+  const isInterac = order.providerId === 'interac';
+  const label = isInterac ? 'E-transfer ref' : 'Provider ref';
+
+  async function save() {
+    const value = draft.trim();
+    if (!value) return;
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await ordersApi.updatePaymentReference(order.id, value);
+      if (updated) onUpdated(updated);
+      setEditing(false);
+    } catch (ex) {
+      setError(ex.message || 'Could not save reference');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div style={{ display: 'flex', gap: 12, fontSize: 13, alignItems: 'flex-start' }}>
+        <span style={{ color: 'var(--text-3)', width: 96, flexShrink: 0 }}>{label}</span>
+        <span className={order.providerRef ? 'mono' : ''} style={{ color: order.providerRef ? 'var(--text)' : 'var(--text-3)', fontSize: order.providerRef ? 12 : 13 }}>
+          {order.providerRef || 'Not recorded'}
+        </span>
+        <button
+          onClick={() => { setDraft(order.providerRef || ''); setError(''); setEditing(true); }}
+          style={{ all: 'unset', cursor: 'pointer', fontSize: 11.5, color: 'var(--orange)', marginLeft: 'auto', flexShrink: 0 }}
+        >
+          {order.providerRef ? 'Edit' : 'Add'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0' }}>
+      <label style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)' }}>{label}</label>
+      <input
+        className="inp mono"
+        style={{ fontSize: 12 }}
+        placeholder="e.g. C1AZNtDBMJ5B"
+        value={draft}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+      />
+      {error && <ActionError msg={error} />}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button variant="primary" size="sm" onClick={save} disabled={saving || !draft.trim()}>
+          {saving ? <Spinner size={13} /> : 'Save'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Optional reference input shown beside a manual-confirm action. */
+function ConfirmRefInput({ value, onChange, disabled }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
+      <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>
+        E-transfer reference <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional)</span>
+      </label>
+      <input
+        className="inp mono"
+        style={{ fontSize: 12 }}
+        placeholder="e.g. C1AZNtDBMJ5B"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 function OrderDrawer({ order, open, onClose, onUpdated }) {
   // Which action is currently running (by id), shared error, and the two
   // multi-step confirmations (deny funds choice + refund confirm).
@@ -41,6 +150,9 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
   const [actionError, setActionError] = useState('');
   const [denyOpen, setDenyOpen] = useState(false);
   const [refundConfirm, setRefundConfirm] = useState(false);
+  // Reference typed alongside a manual confirm, so settling an order and recording
+  // the e-Transfer it came from is one action rather than two.
+  const [confirmRef, setConfirmRef] = useState('');
 
   // Reset transient UI whenever the drawer opens or the order changes.
   useEffect(() => {
@@ -48,6 +160,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
     setActionError('');
     setDenyOpen(false);
     setRefundConfirm(false);
+    setConfirmRef('');
   }, [open, order?.id]);
 
   // Run an action, then fold the returned order back into list + drawer so the
@@ -142,26 +255,33 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {[
-              ['Reference', order.referenceCode || '—'],
-              ['Provider', order.providerId || '—'],
-              ['Currency', order.currency || '—'],
-              ['Placed', formatDate(order.createdAt)],
-              order.expiresAt ? ['Expires', formatDate(order.expiresAt)] : null,
-            ].filter(Boolean).map(([label, val]) => (
+              // [label, value, mono?] — mono for the code-like values an operator
+              // reads character by character against a bank statement.
+              ['Reference', order.referenceCode || '—', true],
+              ['Provider', order.providerId || '—', false],
+              ['Currency', order.currency || '—', false],
+              ['Placed', formatDate(order.createdAt), false],
+              order.expiresAt ? ['Expires', formatDate(order.expiresAt), false] : null,
+              // Populated from the matched e-Transfer notification. Absent on other
+              // providers, and on an e-Transfer the listener never tied to this order.
+              order.etransferSenderName ? ['Sent from', order.etransferSenderName, false] : null,
+              order.etransferReceivedAt ? ['Received', formatDate(order.etransferReceivedAt), false] : null,
+            ].filter(Boolean).map(([label, val, mono]) => (
               <div key={label} style={{ display: 'flex', gap: 12, fontSize: 13, alignItems: 'flex-start' }}>
-                <span style={{ color: 'var(--text-3)', width: 80, flexShrink: 0 }}>{label}</span>
-                <span className={label === 'Reference' ? 'mono' : ''} style={{ color: 'var(--text)', fontSize: label === 'Reference' ? 12 : 13 }}>
+                <span style={{ color: 'var(--text-3)', width: 96, flexShrink: 0 }}>{label}</span>
+                <span className={mono ? 'mono' : ''} style={{ color: 'var(--text)', fontSize: mono ? 12 : 13 }}>
                   {val}
                 </span>
               </div>
             ))}
+            <ProviderRefRow order={order} onUpdated={onUpdated} />
           </div>
         </div>
 
         {/* ── Quarantine review ── */}
         {order.status === ORDER_STATUS.QUARANTINED && (
           <div style={{
-            background: 'var(--purple-soft)', border: '1px solid rgba(124,92,255,0.25)',
+            background: 'var(--purple-soft)', border: '1px solid var(--purple-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -170,22 +290,26 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 12 }}>
               This order was quarantined and needs a manual decision before tickets are issued.
+              Its seats are still held.
             </div>
             {actionError && <ActionError msg={actionError} />}
 
             {!denyOpen ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button
-                  variant="primary"
-                  icon={busy === 'approve' ? undefined : 'check'}
-                  onClick={() => run('approve', () => ordersApi.approveQuarantine(order.id))}
-                  disabled={!!busy}
-                >
-                  {busy === 'approve' ? <><Spinner size={14} /> Approving…</> : 'Approve & issue'}
-                </Button>
-                <Button variant="ghost" onClick={() => { setActionError(''); setDenyOpen(true); }} disabled={!!busy}>
-                  Deny…
-                </Button>
+              <div>
+                <ConfirmRefInput value={confirmRef} onChange={setConfirmRef} disabled={!!busy} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button
+                    variant="primary"
+                    icon={busy === 'approve' ? undefined : 'check'}
+                    onClick={() => run('approve', () => ordersApi.approveQuarantine(order.id, confirmRef))}
+                    disabled={!!busy}
+                  >
+                    {busy === 'approve' ? <><Spinner size={14} /> Approving…</> : 'Approve & issue'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setActionError(''); setDenyOpen(true); }} disabled={!!busy}>
+                    Deny…
+                  </Button>
+                </div>
               </div>
             ) : (
               <div>
@@ -226,7 +350,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
         {/* ── Awaiting manual payment ── */}
         {order.status === ORDER_STATUS.AWAITING_PAYMENT && (
           <div style={{
-            background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
+            background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>
@@ -236,9 +360,10 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
               Confirm that you have received payment for this order.
             </div>
             {actionError && <ActionError msg={actionError} />}
+            <ConfirmRefInput value={confirmRef} onChange={setConfirmRef} disabled={!!busy} />
             <Button
               variant="primary"
-              onClick={() => run('confirm', () => ordersApi.confirmPayment(order.id))}
+              onClick={() => run('confirm', () => ordersApi.confirmPayment(order.id, confirmRef))}
               disabled={!!busy}
               icon={busy === 'confirm' ? undefined : 'check'}
             >
@@ -260,7 +385,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
             </div>
           ) : (
             <div style={{
-              background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.25)',
+              background: 'var(--red-soft)', border: '1px solid var(--red-border)',
               borderRadius: 'var(--r)', padding: '14px 16px',
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>
@@ -287,7 +412,7 @@ function OrderDrawer({ order, open, onClose, onUpdated }) {
         {/* ── Refund in progress ── */}
         {order.status === ORDER_STATUS.REFUND_PENDING && (
           <div style={{
-            background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.25)',
+            background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
             borderRadius: 'var(--r)', padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>
@@ -370,7 +495,7 @@ export default function Orders() {
     <div className="fade-in page-content">
       {error && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 16px', color: 'var(--red)', fontSize: 13,
           marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8,
         }}>

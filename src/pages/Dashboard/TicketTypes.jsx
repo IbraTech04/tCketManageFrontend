@@ -9,9 +9,22 @@ import Spinner from '../../components/ui/Spinner';
 import Icon from '../../components/ui/Icon';
 import Panel from '../../components/ui/Panel';
 import TypePill from '../../components/TypePill';
+import SalesWindowFields from '../../components/SalesWindowFields';
+import { isoToLocalInput, localInputToIso, windowError, saleState, formatWindow } from '../../lib/salesWindow';
 
 // Cycle: no access → unlimited (null) → 1 → 2 → 3 → 5 → no access
 const CYCLE = [undefined, null, 1, 2, 3, 5];
+
+// Build the entitlements payload from a matrix row.
+// undefined = no access (skip); null = unlimited (omit maxEntries); number = limited.
+function buildEntitlements(cellMap) {
+  return Object.entries(cellMap || {})
+    .filter(([, val]) => val !== undefined)
+    .map(([zoneId, maxEntries]) => ({
+      zoneId,
+      ...(maxEntries === null ? {} : { maxEntries }),
+    }));
+}
 
 function nextCycle(current) {
   if (current === undefined) return null;
@@ -34,29 +47,57 @@ function cellStyle(val) {
   return { color: 'var(--blue)', background: 'var(--blue-soft)' };
 }
 
-function NewTypeModal({ zones, onClose, onCreated, eventId }) {
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
+// Create + edit a ticket type. In edit mode the entitlements payload is rebuilt
+// from `matrixRow` so that any pending matrix edits for this type are persisted
+// alongside the metadata change (rather than being clobbered by a stale copy).
+function TypeModal({ mode, zones, eventId, ticketType, matrixRow, onClose, onSaved }) {
+  const isEdit = mode === 'edit';
+  const [name, setName] = useState(ticketType?.name ?? '');
+  const [price, setPrice] = useState(ticketType != null ? String(ticketType.price) : '');
+  const [isActive, setIsActive] = useState(ticketType?.isActive ?? true);
+  const [win, setWin] = useState({
+    start: isoToLocalInput(ticketType?.salesStartAt),
+    end: isoToLocalInput(ticketType?.salesEndAt),
+  });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  const startIso = localInputToIso(win.start);
+  const endIso = localInputToIso(win.end);
+  const winErr = windowError(startIso, endIso);
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) return setErr('Name is required');
     const p = parseFloat(price);
     if (isNaN(p) || p < 0) return setErr('Enter a valid price (0 for free)');
+    if (winErr) return setErr(winErr);
     setSaving(true);
     setErr('');
     try {
-      const created = await eventsApi.createTicketType(eventId, {
+      const payload = {
         name: name.trim(),
         price: p,
-        isActive: true,
-        entitlements: [],
-      });
-      onCreated(created);
+        isActive,
+        salesStartAt: startIso,
+        salesEndAt: endIso,
+      };
+      if (isEdit) {
+        const updated = await zoneTypesApi.updateTicketType(ticketType.id, {
+          ...payload,
+          entitlements: buildEntitlements(matrixRow),
+        });
+        // Backend echoes the saved type; fall back to our payload if it doesn't.
+        onSaved({ ...ticketType, ...payload, ...(updated || {}) });
+      } else {
+        const created = await eventsApi.createTicketType(eventId, {
+          ...payload,
+          entitlements: [],
+        });
+        onSaved(created);
+      }
     } catch (ex) {
-      setErr(ex.message || 'Failed to create ticket type');
+      setErr(ex.message || (isEdit ? 'Failed to save ticket type' : 'Failed to create ticket type'));
     } finally {
       setSaving(false);
     }
@@ -65,7 +106,7 @@ function NewTypeModal({ zones, onClose, onCreated, eventId }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 50,
-      background: 'rgba(20,20,24,0.4)',
+      background: 'var(--overlay)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24,
     }}
@@ -73,11 +114,11 @@ function NewTypeModal({ zones, onClose, onCreated, eventId }) {
     >
       <div
         className="card pop-in"
-        style={{ width: 380, padding: '28px', boxShadow: 'var(--shadow-pop)' }}
+        style={{ width: 420, maxHeight: '90vh', overflowY: 'auto', padding: '28px', boxShadow: 'var(--shadow-pop)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>New ticket type</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>{isEdit ? 'Edit ticket type' : 'New ticket type'}</div>
           <Button variant="subtle" icon="x" onClick={onClose} />
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -103,6 +144,27 @@ function NewTypeModal({ zones, onClose, onCreated, eventId }) {
               onChange={(e) => setPrice(e.target.value)}
             />
           </div>
+
+          {isEdit && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 500, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+              Active (available for purchase)
+            </label>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="clock" size={13} color="var(--text-3)" />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Purchasing window</span>
+              <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>optional</span>
+            </div>
+            <SalesWindowFields
+              start={win.start}
+              end={win.end}
+              onChange={setWin}
+            />
+          </div>
+
           {err && (
             <div style={{ color: 'var(--red)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon name="alert" size={13} color="var(--red)" />
@@ -111,8 +173,8 @@ function NewTypeModal({ zones, onClose, onCreated, eventId }) {
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
             <Button variant="ghost" onClick={onClose} type="button">Cancel</Button>
-            <Button variant="primary" type="submit" disabled={saving}>
-              {saving ? <Spinner size={14} /> : 'Create'}
+            <Button variant="primary" type="submit" disabled={saving || !!winErr}>
+              {saving ? <Spinner size={14} /> : isEdit ? 'Save' : 'Create'}
             </Button>
           </div>
         </form>
@@ -135,6 +197,7 @@ export default function TicketTypes() {
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [editingType, setEditingType] = useState(null);
 
   // Zone management
   const [addingZone, setAddingZone] = useState(false);
@@ -200,18 +263,15 @@ export default function TicketTypes() {
       await Promise.all(dirtyIds.map((ttId) => {
         const tt = ticketTypes.find((t) => t.id === ttId);
         if (!tt) return Promise.resolve();
-        const cellMap = matrix[ttId] || {};
-        const entitlements = Object.entries(cellMap)
-          .filter(([, val]) => val !== undefined)
-          .map(([zoneId, maxEntries]) => ({
-            zoneId,
-            ...(maxEntries === null ? {} : { maxEntries }),
-          }));
+        // PUT replaces the whole ticket type, so carry over the sales window —
+        // otherwise saving the access matrix would silently wipe it.
         return zoneTypesApi.updateTicketType(ttId, {
           name: tt.name,
           price: tt.price,
           isActive: tt.isActive,
-          entitlements,
+          salesStartAt: tt.salesStartAt ?? null,
+          salesEndAt: tt.salesEndAt ?? null,
+          entitlements: buildEntitlements(matrix[ttId]),
         });
       }));
       setDirty({});
@@ -301,6 +361,18 @@ export default function TicketTypes() {
     });
   }
 
+  function handleTypeSaved(updated) {
+    setEditingType(null);
+    setTicketTypes((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+    // The edit modal persisted this row's entitlements from the live matrix,
+    // so the matrix is already in sync — just drop the pending-dirty flag.
+    setDirty((prev) => {
+      const next = { ...prev };
+      delete next[updated.id];
+      return next;
+    });
+  }
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', gap: 10, color: 'var(--text-3)' }}>
@@ -316,7 +388,7 @@ export default function TicketTypes() {
     <div className="fade-in page-content">
       {error && (
         <div style={{
-          background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+          background: 'var(--red-soft)', border: '1px solid var(--red-border)',
           borderRadius: 'var(--r)', padding: '12px 16px', color: 'var(--red)', fontSize: 13,
           marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8,
         }}>
@@ -477,7 +549,7 @@ export default function TicketTypes() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '8px 10px', borderRadius: 'var(--r)',
-                  border: `1px solid ${isDeleting ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
+                  border: `1px solid ${isDeleting ? 'var(--red-border)' : 'var(--border)'}`,
                   background: isDeleting ? 'var(--red-soft)' : 'var(--surface-2)',
                   transition: 'background .15s, border-color .15s',
                 }}
@@ -593,9 +665,26 @@ export default function TicketTypes() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
         {ticketTypes.map((tt) => {
           const entCount = tt.entitlements?.length ?? 0;
+          const sale = saleState(tt);
           return (
-            <div key={tt.id} className="card" style={{ padding: '16px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div
+              key={tt.id}
+              className="card"
+              style={{ padding: '16px 18px', position: 'relative' }}
+            >
+              <button
+                title="Edit ticket type"
+                onClick={() => setEditingType(tt)}
+                style={{
+                  all: 'unset', cursor: 'pointer', position: 'absolute', top: 12, right: 12,
+                  display: 'flex', padding: 5, borderRadius: 6, color: 'var(--text-3)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-3)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.background = ''; }}
+              >
+                <Icon name="edit" size={14} />
+              </button>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10, paddingRight: 26 }}>
                 <TypePill ticketType={tt} />
                 {tt.isActive
                   ? <Badge color="var(--green)" bg="var(--green-soft)" dot>Active</Badge>
@@ -605,10 +694,23 @@ export default function TicketTypes() {
               <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>
                 {money(tt.price)}
               </div>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Icon name="layers" size={12} color="var(--text-3)" />
                   {entCount} zone{entCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <Badge color={sale.color} bg={sale.bg} dot>{sale.label}</Badge>
+                <span
+                  title={formatWindow(tt)}
+                  style={{
+                    fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                  }}
+                >
+                  <Icon name="clock" size={11} color="var(--text-3)" />
+                  {formatWindow(tt)}
                 </span>
               </div>
             </div>
@@ -646,11 +748,24 @@ export default function TicketTypes() {
       </div>
 
       {showModal && (
-        <NewTypeModal
+        <TypeModal
+          mode="create"
           zones={zones}
           eventId={eventId}
           onClose={() => setShowModal(false)}
-          onCreated={handleTypeCreated}
+          onSaved={handleTypeCreated}
+        />
+      )}
+
+      {editingType && (
+        <TypeModal
+          mode="edit"
+          zones={zones}
+          eventId={eventId}
+          ticketType={editingType}
+          matrixRow={matrix[editingType.id]}
+          onClose={() => setEditingType(null)}
+          onSaved={handleTypeSaved}
         />
       )}
     </div>

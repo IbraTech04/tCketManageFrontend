@@ -4,6 +4,8 @@ import { eventsApi } from '../../api/events';
 import { scansApi, outcomeToDisplay } from '../../api/scans';
 import { useApp } from '../../contexts/AppContext';
 import Icon from '../../components/ui/Icon';
+import Logo from '../../components/Logo';
+import LogoMark from '../../components/LogoMark';
 import Spinner from '../../components/ui/Spinner';
 import QRReader from './QRReader';
 
@@ -507,14 +509,7 @@ export default function Scanner() {
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 7,
-              background: D.orange,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 6px rgba(255,106,26,0.35)',
-            }}>
-              <Icon name="ticket" size={16} color="#fff" stroke={2.2} />
-            </div>
+            <LogoMark size={26} color={D.orange} />
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: D.text, letterSpacing: '-0.01em' }}>
                 Gate Scanner
@@ -605,19 +600,7 @@ export default function Scanner() {
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: D.orange,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(255,106,26,0.35)',
-            }}>
-              <Icon name="ticket" size={17} color="#fff" stroke={2.2} />
-            </div>
-            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: D.text }}>
-              t<span style={{ color: D.orange }}>C</span>ketManage
-            </span>
-          </div>
+          <Logo size={28} gap={9} wordmarkSize={15} wordmarkWeight={700} color={D.text} markColor={D.orange} />
           <div style={{ width: 1, height: 20, background: D.border }} />
           <span style={{ fontSize: 13.5, fontWeight: 600, color: D.text2 }}>Gate Scanner</span>
           {selectedEvent && (

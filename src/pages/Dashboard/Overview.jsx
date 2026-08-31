@@ -44,7 +44,7 @@ function LoadingCenter() {
 function ErrorMsg({ msg }) {
   return (
     <div style={{
-      margin: '24px', background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+      margin: '24px', background: 'var(--red-soft)', border: '1px solid var(--red-border)',
       borderRadius: 'var(--r)', padding: '14px 16px', color: 'var(--red)', fontSize: 13.5,
       display: 'flex', alignItems: 'center', gap: 8,
     }}>
@@ -220,7 +220,7 @@ export default function Overview() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '8px 10px', borderRadius: 'var(--r)',
-                    border: `1px solid ${isDeleting ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
+                    border: `1px solid ${isDeleting ? 'var(--red-border)' : 'var(--border)'}`,
                     background: isDeleting ? 'var(--red-soft)' : 'var(--surface-2)',
                     transition: 'background .15s, border-color .15s',
                   }}

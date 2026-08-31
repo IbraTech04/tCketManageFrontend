@@ -1,4 +1,13 @@
+/* ── design tokens ──
+   Light is the base palette on :root. Dark re-declares the same names twice:
+   once behind prefers-color-scheme (so an unset preference follows the OS) and
+   once behind [data-theme="dark"] (so an explicit choice wins either way). The
+   media query is guarded with :not([data-theme="light"]) so picking light on a
+   dark OS actually sticks. Every colour has its base definition here — nothing
+   is defined only inside a media query or attribute block. */
 :root {
+  color-scheme: light;
+
   --orange: #FF6A1A;
   --orange-600: #e85a0f;
   --orange-700: #c2480a;
@@ -15,12 +24,36 @@
   --text-2: #65656e;
   --text-3: #9a9aa3;
 
-  --green: #16a34a;  --green-soft: rgba(22,163,74,0.12);
-  --red: #dc2626;    --red-soft: rgba(220,38,38,0.12);
-  --amber: #d97706;  --amber-soft: rgba(217,119,6,0.13);
-  --blue: #0ea5e9;   --blue-soft: rgba(14,165,233,0.12);
-  --purple: #7c5cff; --purple-soft: rgba(124,92,255,0.12);
-  --pink: #ec4899;   --pink-soft: rgba(236,72,153,0.12);
+  --green: #16a34a;  --green-soft: rgba(22,163,74,0.12);  --green-border: rgba(22,163,74,0.22);
+  --red: #dc2626;    --red-soft: rgba(220,38,38,0.12);    --red-border: rgba(220,38,38,0.22);
+  --amber: #d97706;  --amber-soft: rgba(217,119,6,0.13);  --amber-border: rgba(217,119,6,0.25);
+  --blue: #0ea5e9;   --blue-soft: rgba(14,165,233,0.12);  --blue-border: rgba(14,165,233,0.25);
+  --purple: #7c5cff; --purple-soft: rgba(124,92,255,0.12);--purple-border: rgba(124,92,255,0.25);
+  --pink: #ec4899;   --pink-soft: rgba(236,72,153,0.12);  --pink-border: rgba(236,72,153,0.25);
+
+  /* Saturated fills that carry white content on top. Kept separate from --red
+     / --green, which brighten in dark mode and would stop carrying white text
+     if they were reused here. Identical in both themes. */
+  --red-fill: #dc2626;
+  --green-fill: #16a34a;
+
+  /* Modal/drawer scrim. */
+  --overlay: rgba(20,20,24,0.40);
+
+  /* The event wizard's step rail is a deliberately dark accent panel in both
+     themes, so it needs its own ground rather than --surface. In dark it goes
+     *below* --surface, since matching it would erase the panel entirely. */
+  --rail-bg: #18181b;
+  --rail-border: #2a2e37;
+  --rail-chip: #2a2e37;
+  --rail-text: #f4f4f5;
+  --rail-text-2: #a1a1aa;
+  --rail-text-3: #71717a;
+
+  --scroll-thumb: #d4d4d8;
+  --scroll-thumb-hover: #b4b4bb;
+  /* Unfilled part of the ring on a spinner sitting on a page surface. */
+  --spinner-track: rgba(24,24,27,0.15);
 
   --r-sm: 6px; --r: 9px; --r-lg: 13px; --r-xl: 18px;
   --shadow-sm: 0 1px 2px rgba(24,24,27,0.05);
@@ -31,6 +64,103 @@
   --sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
 }
+
+/* Dark palette. Not an inversion: surfaces step *up* in lightness as they come
+   forward, borders sit lighter than the ground they separate, the status hues
+   are lifted so they clear 4.5:1 on --surface, their soft tints carry more
+   alpha to survive on a dark ground, and shadows go to near-black rather than
+   the blue-tinted ink used in light. Brand orange is unchanged (6.2:1 on
+   --surface); only its hover step is flipped to brighten instead of darken,
+   which otherwise turned muddy against a dark button. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --orange: #FF6A1A;
+    --orange-600: #ff8038;
+    --orange-700: #ff9a5e;
+    --orange-soft: rgba(255,106,26,0.18);
+    --orange-softer: rgba(255,106,26,0.10);
+
+    --bg: #0e0f12;
+    --surface: #17181c;
+    --surface-2: #1e2026;
+    --surface-3: #24262d;
+    --border: #282a31;
+    --border-2: #363942;
+    --text: #f2f2f4;
+    --text-2: #a2a3ad;
+    --text-3: #74757f;
+
+    --green: #3ddc84;  --green-soft: rgba(61,220,132,0.16);  --green-border: rgba(61,220,132,0.30);
+    --red: #f87171;    --red-soft: rgba(248,113,113,0.16);   --red-border: rgba(248,113,113,0.30);
+    --amber: #fbbf24;  --amber-soft: rgba(251,191,36,0.16);  --amber-border: rgba(251,191,36,0.30);
+    --blue: #38bdf8;   --blue-soft: rgba(56,189,248,0.16);   --blue-border: rgba(56,189,248,0.30);
+    --purple: #a78bfa; --purple-soft: rgba(167,139,250,0.16);--purple-border: rgba(167,139,250,0.30);
+    --pink: #f472b6;   --pink-soft: rgba(244,114,182,0.16);  --pink-border: rgba(244,114,182,0.30);
+
+    --red-fill: #dc2626;
+    --green-fill: #16a34a;
+
+    --overlay: rgba(0,0,0,0.62);
+    --rail-bg: #0a0b0e;
+    --rail-border: #23252c;
+
+    --scroll-thumb: #383b43;
+    --scroll-thumb-hover: #4a4e58;
+    --spinner-track: rgba(255,255,255,0.18);
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+    --shadow: 0 1px 3px rgba(0,0,0,0.46), 0 1px 2px rgba(0,0,0,0.34);
+    --shadow-lg: 0 12px 32px -8px rgba(0,0,0,0.62), 0 4px 12px -4px rgba(0,0,0,0.44);
+    --shadow-pop: 0 16px 48px -12px rgba(0,0,0,0.72);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --orange: #FF6A1A;
+  --orange-600: #ff8038;
+  --orange-700: #ff9a5e;
+  --orange-soft: rgba(255,106,26,0.18);
+  --orange-softer: rgba(255,106,26,0.10);
+
+  --bg: #0e0f12;
+  --surface: #17181c;
+  --surface-2: #1e2026;
+  --surface-3: #24262d;
+  --border: #282a31;
+  --border-2: #363942;
+  --text: #f2f2f4;
+  --text-2: #a2a3ad;
+  --text-3: #74757f;
+
+  --green: #3ddc84;  --green-soft: rgba(61,220,132,0.16);  --green-border: rgba(61,220,132,0.30);
+  --red: #f87171;    --red-soft: rgba(248,113,113,0.16);   --red-border: rgba(248,113,113,0.30);
+  --amber: #fbbf24;  --amber-soft: rgba(251,191,36,0.16);  --amber-border: rgba(251,191,36,0.30);
+  --blue: #38bdf8;   --blue-soft: rgba(56,189,248,0.16);   --blue-border: rgba(56,189,248,0.30);
+  --purple: #a78bfa; --purple-soft: rgba(167,139,250,0.16);--purple-border: rgba(167,139,250,0.30);
+  --pink: #f472b6;   --pink-soft: rgba(244,114,182,0.16);  --pink-border: rgba(244,114,182,0.30);
+
+  --red-fill: #dc2626;
+  --green-fill: #16a34a;
+
+  --overlay: rgba(0,0,0,0.62);
+  --rail-bg: #0a0b0e;
+  --rail-border: #23252c;
+
+  --scroll-thumb: #383b43;
+  --scroll-thumb-hover: #4a4e58;
+  --spinner-track: rgba(255,255,255,0.18);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow: 0 1px 3px rgba(0,0,0,0.46), 0 1px 2px rgba(0,0,0,0.34);
+  --shadow-lg: 0 12px 32px -8px rgba(0,0,0,0.62), 0 4px 12px -4px rgba(0,0,0,0.44);
+  --shadow-pop: 0 16px 48px -12px rgba(0,0,0,0.72);
+}
+
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -46,10 +176,10 @@ body {
 /* ── scrollbars ── */
 .tm-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .tm-scroll::-webkit-scrollbar-thumb {
-  background: #d4d4d8; border-radius: 8px;
+  background: var(--scroll-thumb); border-radius: 8px;
   border: 3px solid transparent; background-clip: content-box;
 }
-.tm-scroll::-webkit-scrollbar-thumb:hover { background: #b4b4bb; background-clip: content-box; }
+.tm-scroll::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 
 /* ── typography ── */
 .mono { font-family: var(--mono); font-feature-settings: 'tnum' 1; }
@@ -67,6 +197,13 @@ body {
 }
 .btn:active { transform: translateY(0.5px); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+/* Looks disabled but still takes clicks, so a blocked action can explain
+   itself (the wizard shakes it) instead of silently doing nothing. Always
+   pair with aria-disabled="true". */
+.btn-blocked { opacity: 0.5; cursor: not-allowed; }
+.btn-blocked:active { transform: none; }
+.btn-primary.btn-blocked:hover { background: var(--orange); }
+.btn-ghost.btn-blocked:hover { background: var(--surface); }
 
 .btn-primary { background: var(--orange); color: #fff; box-shadow: var(--shadow-sm); }
 .btn-primary:hover { background: var(--orange-600); }
@@ -74,8 +211,8 @@ body {
 .btn-ghost:hover { background: var(--surface-3); }
 .btn-subtle { background: transparent; color: var(--text-2); }
 .btn-subtle:hover { background: var(--surface-3); color: var(--text); }
-.btn-danger { background: var(--red-soft); color: var(--red); border-color: rgba(220,38,38,0.2); }
-.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-danger { background: var(--red-soft); color: var(--red); border-color: var(--red-border); }
+.btn-danger:hover { background: var(--red-fill); color: #fff; }
 
 .btn-sm { height: 28px; font-size: 12px; padding: 0 10px; border-radius: var(--r-sm); }
 .btn-icon { width: 34px; padding: 0; justify-content: center; }
@@ -137,6 +274,46 @@ textarea.inp { height: auto; padding: 9px 11px; }
 .pop-in { animation: popIn .22s cubic-bezier(.16,1,.3,1) both; }
 @keyframes popIn { from { transform: scale(.975); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* Wizard step transitions — the step body is keyed on the step index so the
+   animation re-runs on every change; `-back` plays when stepping backwards so
+   the content always slides in from the direction you came from. */
+.wiz-step { animation: wizStepIn .28s cubic-bezier(.16,1,.3,1) backwards; }
+@keyframes wizStepIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: none; }
+}
+.wiz-step-back { animation-name: wizStepInBack; }
+@keyframes wizStepInBack {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Rail watermark: fades up once when the wizard opens. */
+.wiz-watermark { animation: wizWatermarkIn .6s cubic-bezier(.16,1,.3,1) .1s backwards; }
+@keyframes wizWatermarkIn {
+  from { opacity: 0; transform: translate(-24px, 24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-step, .wiz-step-back, .wiz-watermark { animation: none; }
+  /* Keep the rejection legible without moving anything. */
+  .shake { animation: shakeFlash .4s ease; }
+  @keyframes shakeFlash {
+    from, to { box-shadow: var(--shadow-sm); }
+    35%, 65% { box-shadow: 0 0 0 3px var(--red-soft); }
+  }
+}
+
+/* Rejection nudge for a blocked control. */
+.shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97); }
+@keyframes shake {
+  10%, 90%          { transform: translateX(-2px); }
+  20%, 80%          { transform: translateX(3px); }
+  30%, 50%, 70%     { transform: translateX(-5px); }
+  40%, 60%          { transform: translateX(5px); }
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @keyframes scanline {
@@ -160,7 +337,7 @@ textarea.inp { height: auto; padding: 9px 11px; }
   flex-shrink: 0;
 }
 .spinner-dark {
-  border-color: rgba(24,24,27,0.15);
+  border-color: var(--spinner-track);
   border-top-color: var(--text-2);
 }
 

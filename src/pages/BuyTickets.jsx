@@ -3,6 +3,7 @@ import { eventsApi } from '../api/events';
 import { ordersApi } from '../api/orders';
 import { money } from '../api/zoneTypes';
 import { orderStatusLabel } from '../lib/orderStatus';
+import { isOnSale, formatBound } from '../lib/salesWindow';
 import Icon from '../components/ui/Icon';
 import Spinner from '../components/ui/Spinner';
 
@@ -32,6 +33,7 @@ export default function BuyTickets() {
 
   const [eventId, setEventId] = useState('');
   const [ticketTypes, setTicketTypes] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
   const [ttLoading, setTtLoading] = useState(false);
   const [ticketTypeId, setTicketTypeId] = useState('');
 
@@ -114,7 +116,7 @@ export default function BuyTickets() {
           {p.instructions && (
             <div style={{
               marginTop: 16, background: 'var(--amber-soft)',
-              border: '1px solid rgba(217,119,6,0.25)', borderRadius: 'var(--r)',
+              border: '1px solid var(--amber-border)', borderRadius: 'var(--r)',
               padding: '14px 16px',
             }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>
@@ -270,7 +272,7 @@ export default function BuyTickets() {
 
               {error && (
                 <div style={{
-                  background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+                  background: 'var(--red-soft)', border: '1px solid var(--red-border)',
                   borderRadius: 'var(--r)', padding: '10px 14px',
                   color: 'var(--red)', fontSize: 13,
                   display: 'flex', alignItems: 'center', gap: 8,

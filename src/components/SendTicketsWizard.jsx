@@ -130,7 +130,7 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
-        background: 'rgba(20,20,24,0.45)',
+        background: 'var(--overlay)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
       onClick={isDone ? undefined : (step < 3 ? onClose : undefined)}
@@ -190,7 +190,7 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
               </div>
               <div style={{
                 display: 'flex', gap: 10, padding: '12px 14px',
-                background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.22)',
+                background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
                 borderRadius: 'var(--r-lg)',
               }}>
                 <Icon name="alert" size={16} color="var(--amber)" style={{ marginTop: 1, flexShrink: 0 }} />
@@ -243,7 +243,7 @@ export default function SendTicketsWizard({ eventId, eventName, tickets = [], on
               {error && (
                 <div style={{
                   display: 'flex', gap: 8, padding: '10px 12px',
-                  background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+                  background: 'var(--red-soft)', border: '1px solid var(--red-border)',
                   borderRadius: 'var(--r)', color: 'var(--red)', fontSize: 12.5,
                 }}>
                   <Icon name="alert" size={14} color="var(--red)" /> {error}

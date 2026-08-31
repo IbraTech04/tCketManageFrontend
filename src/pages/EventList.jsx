@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi } from '../api/events';
+import { ordersApi } from '../api/orders';
 import { useApp } from '../contexts/AppContext';
 import Logo from '../components/Logo';
 import Icon from '../components/ui/Icon';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
+import ThemeToggle from '../components/ui/ThemeToggle';
 import EventWizard from '../components/EventWizard';
 
 function formatEventDate(isoString) {
@@ -186,6 +188,20 @@ export default function EventList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+
+  // The count lives on the home screen because the failure this queue fixes is
+  // nobody noticing. A payment sitting unmatched costs a buyer their seats
+  // silently, so it has to be visible without anyone going looking for it.
+  // Failing quietly is deliberate: an operator who lacks the admin role, or a
+  // deployment with no e-Transfer provider, should still get a working page.
+  useEffect(() => {
+    let cancelled = false;
+    ordersApi.unmatchedPayments()
+      .then((data) => { if (!cancelled) setUnmatchedCount((data ?? []).length); })
+      .catch(() => { /* not fatal to the events list */ });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +244,7 @@ export default function EventList() {
       }}>
         <Logo size={26} />
         <div style={{ display: 'flex', gap: 8 }}>
+          <ThemeToggle variant="ghost" />
           <Button
             variant="ghost"
             icon="scan"
@@ -240,6 +257,31 @@ export default function EventList() {
 
       {/* Page content */}
       <main style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 24px 48px' }}>
+        {/* Unmatched payments. Only shown when there are any — an empty queue is not
+            news, and a permanent banner is one people stop reading. */}
+        {unmatchedCount > 0 && (
+          <button
+            onClick={() => navigate('/payments/unmatched')}
+            style={{
+              all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
+              display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+              background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
+              borderRadius: 'var(--r-lg)', padding: '14px 18px', marginBottom: 22,
+            }}
+          >
+            <Icon name="alert" size={16} color="var(--amber)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--amber)' }}>
+                {unmatchedCount} payment{unmatchedCount === 1 ? '' : 's'} couldn&apos;t be matched to an order
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 2 }}>
+                Someone paid and their seats will expire unless this is resolved.
+              </div>
+            </div>
+            <Icon name="chevright" size={15} color="var(--amber)" />
+          </button>
+        )}
+
         {/* Page header */}
         <div style={{
           display: 'flex', alignItems: 'flex-start',
@@ -280,7 +322,7 @@ export default function EventList() {
         {/* Error */}
         {!loading && error && (
           <div style={{
-            background: 'var(--red-soft)', border: '1px solid rgba(220,38,38,0.2)',
+            background: 'var(--red-soft)', border: '1px solid var(--red-border)',
             borderRadius: 'var(--r-lg)', padding: '16px 20px',
             display: 'flex', alignItems: 'center', gap: 10,
             color: 'var(--red)', fontSize: 13.5,

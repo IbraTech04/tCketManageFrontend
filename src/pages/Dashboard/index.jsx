@@ -6,6 +6,7 @@ import Logo from '../../components/Logo';
 import Icon from '../../components/ui/Icon';
 import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
+import ThemeToggle from '../../components/ui/ThemeToggle';
 import EventWizard from '../../components/EventWizard';
 import Overview from './Overview';
 import Attendees from './Attendees';
@@ -183,6 +184,7 @@ export default function Dashboard() {
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Admin</div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Administrator</div>
               </div>
+              <ThemeToggle variant="subtle" size="sm" />
               <button
                 title="Sign out"
                 onClick={handleLogout}

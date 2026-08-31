@@ -44,8 +44,6 @@ export default function EmailJobProgress({ jobId, total, onComplete, onError }) 
     processed: 0,
     sent: 0,
     failed: 0,
-    lastEmail: null,
-    lastSuccess: null,
     total,
   });
   const [connErr, setConnErr] = useState(null);
@@ -109,36 +107,22 @@ export default function EmailJobProgress({ jobId, total, onComplete, onError }) 
         <StatBox label="Total" value={effectiveTotal} color="var(--text)" />
       </div>
 
-      {/* Last processed email */}
-      {status.lastEmail && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '9px 12px', borderRadius: 'var(--r)',
-          background: 'var(--surface-2)', border: '1px solid var(--border)',
-          fontSize: 12.5, color: 'var(--text-2)',
-          transition: 'opacity 0.2s',
-        }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-            background: status.lastSuccess === false ? 'var(--red)' : 'var(--green)',
-          }} />
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {status.lastEmail}
-          </span>
-          <span style={{
-            fontSize: 11, fontWeight: 500,
-            color: status.lastSuccess === false ? 'var(--red)' : 'var(--green)',
-          }}>
-            {status.lastSuccess === false ? 'failed' : 'sent'}
-          </span>
-        </div>
-      )}
+      {/*
+        No per-recipient "sending to <address>" line here, by design.
+        The broadcast on /topic/email-jobs/{jobId} used to carry `lastEmail`, but
+        STOMP subscriptions are not authorized the way the REST twin is, so that
+        field exposed the whole attendee roster to any websocket subscriber. The
+        backend removed it (security audit / backend PR #7) and it must not be
+        restored here. The address is still available from the authorized REST
+        snapshot GET /email-jobs/{jobId} (emailJobsApi.getStatus) if a future
+        feature genuinely needs it. Live progress is counts only.
+      */}
 
       {/* Connection error */}
       {connErr && (
         <div style={{
           display: 'flex', gap: 8, padding: '9px 12px',
-          background: 'var(--amber-soft)', border: '1px solid rgba(217,119,6,0.22)',
+          background: 'var(--amber-soft)', border: '1px solid var(--amber-border)',
           borderRadius: 'var(--r)', color: 'var(--amber)', fontSize: 12.5,
         }}>
           <Icon name="alert" size={14} color="var(--amber)" />
