@@ -2,6 +2,12 @@ import { api } from './client';
 
 export const ordersApi = {
   list: (eventId) => api.get(`/orders?eventId=${eventId}`),
+  // Look up the single order bearing a XXXX-XXXX code. Backs linking an unmatched
+  // payment by hand: when the memo gave the matcher nothing, the operator identifies
+  // the order themselves and names it by the code they can read off the order book.
+  // Returns a zero-or-one array, so a miss is an empty result rather than a 404.
+  byReferenceCode: (code) =>
+    api.get(`/orders?referenceCode=${encodeURIComponent(code)}`),
   get: (id) => api.get(`/orders/${id}`),
   create: (data) => api.post('/orders', data),
   // Confirm a manual payment. `providerRef` is optional — for Interac it's the

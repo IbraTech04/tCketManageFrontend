@@ -101,6 +101,126 @@ function SuggestionRow({ suggestion, busy, onLink }) {
   );
 }
 
+/**
+ * Linking to an order the matcher didn't offer.
+ *
+ * The suggestions cover a mistyped code. They cover nothing at all when the buyer
+ * left the memo blank or wrote "for the tickets" — which is exactly when a human is
+ * most needed, because the operator can often identify the order from the amount,
+ * the payer and the timing even though no algorithm could. Without this path their
+ * only remaining option is to dismiss a real payment.
+ *
+ * Asks for the reference code rather than an order id: the code is what an operator
+ * can read off the order book, and nobody has a UUID in front of them. The order is
+ * looked up and shown for confirmation before anything is linked, so this stays a
+ * decision made on evidence rather than a blind write.
+ */
+function ManualLink({ payment, busy, onLink }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState('');
+  const [looking, setLooking] = useState(false);
+  const [found, setFound] = useState(null);
+  const [error, setError] = useState('');
+
+  async function lookup() {
+    const value = code.trim();
+    if (!value) return;
+    setLooking(true);
+    setError('');
+    setFound(null);
+    try {
+      const matches = await ordersApi.byReferenceCode(value);
+      if (!matches || matches.length === 0) {
+        setError(`No order has the code ${value.toUpperCase()}.`);
+      } else {
+        setFound(matches[0]);
+      }
+    } catch (ex) {
+      setError(ex.message || 'Lookup failed');
+    } finally {
+      setLooking(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} disabled={!!busy}>
+        Link to a specific order…
+      </Button>
+    );
+  }
+
+  const amountAgrees = found
+    && Number(found.amountTotal) === Number(payment.amount);
+
+  return (
+    <div style={{
+      background: 'var(--surface-2)', border: '1px solid var(--border)',
+      borderRadius: 'var(--r)', padding: '12px 14px', marginBottom: 10,
+    }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Link to a specific order</div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+        Enter the order's reference code — you'll see the order before anything is linked.
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: found || error ? 10 : 0 }}>
+        <input
+          className="inp mono"
+          style={{ fontSize: 12 }}
+          placeholder="ABCD-EFGH"
+          value={code}
+          onChange={(e) => { setCode(e.target.value); setFound(null); setError(''); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') lookup(); }}
+        />
+        <Button variant="ghost" size="sm" onClick={lookup} disabled={looking || !code.trim()}>
+          {looking ? <Spinner size={13} /> : 'Find'}
+        </Button>
+      </div>
+
+      {error && (
+        <div style={{ color: 'var(--red)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <Icon name="alert" size={12} color="var(--red)" />
+          {error}
+        </div>
+      )}
+
+      {found && (
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--r)', padding: '10px 12px', marginBottom: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <span className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{found.referenceCode}</span>
+            <StatusBadge status={found.status} />
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 5 }}>
+            {found.buyerEmail || '—'} · {money(found.amountTotal || 0)}
+          </div>
+          {/* The operator overrode the matcher, so the mismatch they most need warning
+              about is the amount — shown, not blocked: an underpayment still has to go
+              somewhere. */}
+          <Evidence ok={amountAgrees}>
+            {amountAgrees ? 'Amount matches this payment' : 'Amount differs from this payment'}
+          </Evidence>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => onLink(found.id)}
+          disabled={!found || !!busy}
+        >
+          {busy === found?.id ? <Spinner size={13} /> : 'Link & settle'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={!!busy}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function PaymentCard({ payment, onResolved }) {
   const [expanded, setExpanded] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
@@ -249,10 +369,15 @@ function PaymentCard({ payment, onResolved }) {
                 </div>
               ) : (
                 <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 14 }}>
-                  Nothing in the memo resembles an open order's code. This payment may belong to
-                  someone else, or the order may already be paid.
+                  Nothing in the memo resembles an open order's code — the buyer probably left it out
+                  entirely. If you can tell which order this is from the amount, the payer or the
+                  timing, link it by hand below.
                 </div>
               )}
+
+              {/* Manual link. Offered whether or not there are suggestions: the matcher can be
+                  empty-handed, and it can also be confidently wrong. */}
+              <ManualLink payment={payment} busy={busy} onLink={handleLink} />
 
               {/* Dismissal */}
               {!dismissOpen ? (
