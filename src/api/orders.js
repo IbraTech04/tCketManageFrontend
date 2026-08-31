@@ -41,4 +41,25 @@ export const ordersApi = {
   refund: (id) => api.post(`/orders/${id}/refund`, {}),
   // Mark an external refund as settled (REFUND_PENDING → REFUNDED).
   completeRefund: (id) => api.post(`/orders/${id}/refund/complete`, {}),
+
+  // ── Unmatched payments ──
+  // e-Transfers that arrived but matched no order, usually because the buyer
+  // mistyped or omitted the memo code. Nothing flags these on any order, so
+  // without this queue the buyer's order quietly expires and their seats get
+  // resold — after they paid.
+  unmatchedPayments: () => api.get('/payments/unmatched'),
+  // Candidate orders for one payment, best first. Separate call from the list
+  // because scoring runs every open order against one memo; folding it into the
+  // listing would make opening the queue quadratic in the number of orders.
+  paymentSuggestions: (id) => api.get(`/payments/unmatched/${id}/suggestions`),
+  // Attach a payment to the order an operator chose, and settle it. Returns the
+  // resulting ORDER rather than the receipt: one whose hold lapsed while the
+  // payment sat in the queue comes back PAID if its seats were still free and
+  // REFUND_PENDING if they had been resold, and that distinction is the answer.
+  linkPayment: (id, orderId) => api.post(`/payments/unmatched/${id}/link`, { orderId }),
+  // Write a payment off as never going to match — wrong organisation, or a
+  // duplicate that is owed no tickets.
+  dismissPayment: (id, note) =>
+    api.post(`/payments/unmatched/${id}/dismiss`, { note: note || null }),
+  restorePayment: (id) => api.post(`/payments/unmatched/${id}/restore`, {}),
 };
