@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { eventsApi } from '../api/events';
 import Icon from './ui/Icon';
-import LogoMark from './LogoMark';
 import Button from './ui/Button';
-import Spinner from './ui/Spinner';
+import WizardShell, { Composer, Field, InlineNote, SectionHead, StepHeading, Warning } from './ui/Wizard';
 import SalesWindowFields from './SalesWindowFields';
 import { localInputToIso, windowError, formatWindow } from '../lib/salesWindow';
 
@@ -20,198 +19,11 @@ const STEPS = [
   { id: 3, label: 'Review',        icon: 'check' },
 ];
 
-// Rail geometry, shared by the step chips and the progress spine drawn behind
-// them. Keep these in sync rather than hard-coding the same numbers twice.
-const RAIL = {
-  padY: 20,
-  gap: 4,
-  rowPadY: 9,
-  rowPadX: 10,
-  chip: 22,
-  get rowH() { return this.chip + this.rowPadY * 2 + this.gap; },
-  get chipCenterX() { return 16 + this.rowPadX + this.chip / 2; },
-};
-
-function StepRail({ current }) {
-  return (
-    <div style={{
-      width: 210, background: 'var(--rail-bg)', borderRight: '1px solid var(--rail-border)',
-      display: 'flex', flexDirection: 'column', padding: '28px 0',
-      flexShrink: 0, position: 'relative', overflow: 'hidden',
-    }}>
-      {/* Brand silhouette, bleeding off the bottom-left corner of the rail */}
-      <div
-        className="wiz-watermark"
-        aria-hidden="true"
-        style={{
-          position: 'absolute', left: -52, bottom: -46,
-          pointerEvents: 'none', userSelect: 'none', zIndex: 0,
-        }}
-      >
-        <LogoMark size={200} color="rgba(255,106,26,0.12)" />
-      </div>
-
-      <div style={{ padding: '0 20px 24px', borderBottom: '1px solid var(--rail-border)', position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <LogoMark size={26} />
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--rail-text)', letterSpacing: '-0.02em' }}>
-            New Event
-          </span>
-        </div>
-      </div>
-      <div style={{ padding: `${RAIL.padY}px 16px`, display: 'flex', flexDirection: 'column', gap: RAIL.gap, position: 'relative', zIndex: 1 }}>
-        {/* Progress spine behind the step chips — the fill height animates as
-            you move between screens. Geometry is derived from RAIL so the line
-            stays glued to the chip centres. */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute', width: 2, borderRadius: 1,
-            left: RAIL.chipCenterX - 1,
-            top: RAIL.padY + RAIL.rowPadY + RAIL.chip / 2,
-            height: (STEPS.length - 1) * RAIL.rowH,
-            background: 'var(--rail-chip)',
-          }}
-        >
-          <div style={{
-            width: '100%', borderRadius: 1,
-            height: `${(current / (STEPS.length - 1)) * 100}%`,
-            background: 'linear-gradient(180deg, var(--green-fill), var(--orange))',
-            transition: 'height .34s cubic-bezier(.16,1,.3,1)',
-          }} />
-        </div>
-
-        {STEPS.map((s) => {
-          const done = current > s.id;
-          const active = current === s.id;
-          return (
-            <div key={s.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: `${RAIL.rowPadY}px ${RAIL.rowPadX}px`, borderRadius: 8,
-              background: active ? 'rgba(255,106,26,0.14)' : 'transparent',
-              transition: 'background .22s ease',
-              position: 'relative',
-            }}>
-              <div style={{
-                width: RAIL.chip, height: RAIL.chip, borderRadius: 6,
-                background: done ? 'var(--green-fill)' : active ? 'var(--orange)' : 'var(--rail-chip)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                transition: 'background .22s ease, box-shadow .22s ease, transform .22s cubic-bezier(.16,1,.3,1)',
-                transform: active ? 'scale(1.08)' : 'none',
-                boxShadow: active ? '0 0 0 4px rgba(255,106,26,0.16)' : 'none',
-              }}>
-                {done
-                  ? <Icon name="check" size={12} color="#fff" stroke={2.5} />
-                  : <Icon name={s.icon} size={12} color={active ? '#fff' : '#8b8f99'} stroke={2} />
-                }
-              </div>
-              <div style={{
-                fontSize: 12.5, fontWeight: 500,
-                color: active ? 'var(--rail-text)' : done ? 'var(--rail-text-2)' : 'var(--rail-text-3)',
-                transition: 'color .15s',
-              }}>
-                {s.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Blocking warning shown on a step that can't be completed yet. Same shape on
-// every step so "you can't continue" always looks the same.
-function Warning({ children }) {
-  return (
-    <div style={{
-      padding: '14px 16px', background: 'var(--amber-soft)',
-      border: '1px solid var(--amber-border)', borderRadius: 'var(--r)',
-      fontSize: 12.5, color: 'var(--amber)', lineHeight: 1.5,
-      display: 'flex', alignItems: 'flex-start', gap: 9,
-    }}>
-      <Icon name="alert" size={14} color="var(--amber)" style={{ marginTop: 1, flexShrink: 0 }} />
-      <div>{children}</div>
-    </div>
-  );
-}
-
-// Card that groups the inputs for adding one item, with the add action pinned
-// to its footer. Both steps use it so "add a thing" looks the same everywhere.
-function Composer({ title, hint, children, footer }) {
-  return (
-    <div style={{
-      border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
-      background: 'var(--surface-2)', overflow: 'hidden',
-    }}>
-      <div style={{ padding: '13px 16px 0' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
-        {hint && <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>{hint}</div>}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '13px 16px' }}>
-        {children}
-      </div>
-      {footer && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-          padding: '11px 16px', borderTop: '1px solid var(--border)',
-          background: 'var(--surface-3)',
-        }}>
-          {footer}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Header above a list of what has been added so far.
-function SectionHead({ title, count, hint }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-      <span style={{
-        fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
-        textTransform: 'uppercase', letterSpacing: '.06em',
-      }}>
-        {title}
-      </span>
-      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{count}</span>
-      {hint && <span style={{ fontSize: 11.5, color: 'var(--text-3)', marginLeft: 'auto' }}>{hint}</span>}
-    </div>
-  );
-}
-
-// Inline note under a composer field — why the add button won't fire.
-function InlineNote({ tone = 'error', children }) {
-  const color = tone === 'error' ? 'var(--red)' : 'var(--text-3)';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color }}>
-      <Icon name={tone === 'error' ? 'alert' : 'info'} size={12} color={color} />
-      {children}
-    </span>
-  );
-}
-
-function Field({ label, required, children, hint }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <label style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)', display: 'flex', gap: 4 }}>
-        {label}
-        {required && <span style={{ color: 'var(--red)' }}>*</span>}
-      </label>
-      {children}
-      {hint && <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{hint}</div>}
-    </div>
-  );
-}
-
 // Step 0: Event Details
 function StepDetails({ data, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 6 }}>Event Details</div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Basic information about your event.</div>
-      </div>
+      <StepHeading title="Event Details">Basic information about your event.</StepHeading>
       <Field label="Event name" required>
         <input
           className="inp"
@@ -277,10 +89,7 @@ function StepZones({ zones, onChange }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 6 }}>Zones</div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Define the areas attendees can access. Every ticket type grants entry to one or more of these.</div>
-      </div>
+      <StepHeading title="Zones">Define the areas attendees can access. Every ticket type grants entry to one or more of these.</StepHeading>
 
       {zones.length === 0 && (
         <Warning>
@@ -458,10 +267,7 @@ function StepTicketTypes({ ticketTypes, zones, onChange }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 6 }}>Ticket Types</div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)' }}>What attendees can buy. After adding a type, set which zones it gets into.</div>
-      </div>
+      <StepHeading title="Ticket Types">What attendees can buy. After adding a type, set which zones it gets into.</StepHeading>
 
       {ticketTypes.length === 0 && (
         <Warning>
@@ -662,10 +468,7 @@ function StepTicketTypes({ ticketTypes, zones, onChange }) {
 function StepReview({ details, zones, ticketTypes }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 6 }}>Review & Publish</div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Confirm your event details before publishing.</div>
-      </div>
+      <StepHeading title="Review & Publish">Confirm your event details before publishing.</StepHeading>
 
       {/* Event card */}
       <div className="card" style={{ padding: '16px 18px' }}>
@@ -743,28 +546,11 @@ function StepReview({ details, zones, ticketTypes }) {
 
 export default function EventWizard({ onClose, onDone }) {
   const [step, setStep] = useState(0);
-  // +1 when moving forward, -1 when moving back — decides which way the step
-  // body slides in.
-  const [dir, setDir] = useState(1);
-  const [shaking, setShaking] = useState(false);
-  const scrollRef = useRef(null);
   const [details, setDetails] = useState({ name: '', time: '', location: '', description: '' });
   const [zones, setZones] = useState([]);
   const [ticketTypes, setTicketTypes] = useState([]);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
-
-  // Each step starts at the top; without this a long step leaves the next one
-  // scrolled halfway down.
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [step]);
-
-  function goTo(next) {
-    if (next === step) return;
-    setDir(next > step ? 1 : -1);
-    setStep(next);
-  }
 
   function canContinue() {
     if (step === 0) return details.name.trim().length > 0 && details.time.length > 0;
@@ -773,21 +559,6 @@ export default function EventWizard({ onClose, onDone }) {
     if (step === 1) return zones.length > 0;
     if (step === 2) return ticketTypes.length > 0;
     return true;
-  }
-
-  // Continue stays clickable while blocked so the click can shake rather than
-  // do nothing. Dropping the class first lets a repeat click restart it.
-  function rejectContinue() {
-    setShaking(false);
-    requestAnimationFrame(() => setShaking(true));
-  }
-
-  function handleContinue() {
-    if (!canContinue()) {
-      rejectContinue();
-      return;
-    }
-    goTo(step + 1);
   }
 
   async function handlePublish() {
@@ -845,103 +616,29 @@ export default function EventWizard({ onClose, onDone }) {
     }
   }
 
+  const isLast = step === STEPS.length - 1;
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 50,
-      background: 'var(--overlay)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '24px',
-    }}
-      onClick={onClose}
+    <WizardShell
+      title="New Event"
+      steps={STEPS}
+      step={step}
+      onStepChange={setStep}
+      onClose={onClose}
+      canContinue={canContinue()}
+      error={publishError}
+      primary={isLast ? {
+        label: 'Publish event',
+        icon: 'sparkle',
+        onClick: handlePublish,
+        busy: publishing,
+        busyLabel: 'Publishing…',
+      } : undefined}
     >
-      <div
-        className="pop-in"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          display: 'flex', width: '100%', maxWidth: 820,
-          height: 560, maxHeight: '90vh',
-          background: 'var(--surface)',
-          borderRadius: 'var(--r-xl)',
-          border: '1px solid var(--border)',
-          boxShadow: 'var(--shadow-pop)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Left rail */}
-        <StepRail current={step} />
-
-        {/* Right content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-          {/* Header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '16px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-          }}>
-            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontWeight: 500 }}>
-              Step {step + 1} of {STEPS.length}
-            </div>
-            <Button variant="subtle" icon="x" onClick={onClose} />
-          </div>
-
-          {/* Content */}
-          <div ref={scrollRef} className="tm-scroll" style={{ flex: 1, overflowY: 'auto', padding: '28px 28px' }}>
-            {/* Keyed on `step` so React remounts the wrapper and the slide-in
-                animation replays on every transition. */}
-            <div key={step} className={`wiz-step${dir < 0 ? ' wiz-step-back' : ''}`}>
-              {step === 0 && <StepDetails data={details} onChange={setDetails} />}
-              {step === 1 && <StepZones zones={zones} onChange={setZones} />}
-              {step === 2 && <StepTicketTypes ticketTypes={ticketTypes} zones={zones} onChange={setTicketTypes} />}
-              {step === 3 && <StepReview details={details} zones={zones} ticketTypes={ticketTypes} />}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 24px', borderTop: '1px solid var(--border)', flexShrink: 0,
-            background: 'var(--surface-2)',
-          }}>
-            <Button
-              variant="ghost"
-              icon="arrowleft"
-              onClick={() => goTo(Math.max(0, step - 1))}
-              disabled={step === 0 || publishing}
-            >
-              Back
-            </Button>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {publishError && (
-                <span style={{ fontSize: 12.5, color: 'var(--red)', maxWidth: 260 }}>{publishError}</span>
-              )}
-              {step < STEPS.length - 1 ? (
-                <Button
-                  variant="primary"
-                  iconRight="arrowright"
-                  className={[
-                    canContinue() ? '' : 'btn-blocked',
-                    shaking ? 'shake' : '',
-                  ].filter(Boolean).join(' ')}
-                  aria-disabled={canContinue() ? undefined : true}
-                  onClick={handleContinue}
-                  onAnimationEnd={() => setShaking(false)}
-                >
-                  Continue
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  icon={publishing ? undefined : 'sparkle'}
-                  onClick={handlePublish}
-                  disabled={publishing}
-                >
-                  {publishing ? <><Spinner size={14} /> Publishing…</> : 'Publish event'}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      {step === 0 && <StepDetails data={details} onChange={setDetails} />}
+      {step === 1 && <StepZones zones={zones} onChange={setZones} />}
+      {step === 2 && <StepTicketTypes ticketTypes={ticketTypes} zones={zones} onChange={setTicketTypes} />}
+      {step === 3 && <StepReview details={details} zones={zones} ticketTypes={ticketTypes} />}
+    </WizardShell>
   );
 }
