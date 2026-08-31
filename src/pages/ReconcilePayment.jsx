@@ -444,8 +444,7 @@ export default function ReconcilePayment() {
                 <Icon name="search" size={26} color="var(--text-3)" />
                 <div style={{ fontSize: 14.5, fontWeight: 600, margin: '12px 0 6px' }}>No order to compare against</div>
                 <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, maxWidth: 440, margin: '0 auto' }}>
-                  Nothing in the memo resembles an open order's code. If you can tell which order this
-                  is from the amount, the payer or the timing, name it on the right.
+                  There is insufficient information to suggest a candidate order. You can look it up by code, or skip this payment for now and come back later.
                 </div>
               </div>
             )}
@@ -512,11 +511,11 @@ export default function ReconcilePayment() {
             <div style={{ padding: '14px 22px', background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Write this payment off?</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10, lineHeight: 1.5 }}>
-                It leaves the queue but stays on record, with who wrote it off and why. Reversible.
+                Remove the payment from the queue while keeping it available for bookkeeping. Reversible, but you should note why you are dismissing it.
               </div>
               <input
                 className="inp"
-                placeholder="Reason — e.g. sent to us by mistake, refunded by hand"
+                placeholder="Reason. e.g. sent to us by mistake, refunded by hand"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 style={{ marginBottom: 10, maxWidth: 520 }}
