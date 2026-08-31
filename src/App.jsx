@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Scanner from './pages/Scanner';
 import BuyTickets from './pages/BuyTickets';
 import UnmatchedPayments from './pages/UnmatchedPayments';
+import ReconcilePayment from './pages/ReconcilePayment';
 
 export default function App() {
   return (
@@ -20,6 +21,9 @@ export default function App() {
           <Route path="/scanner" element={<ProtectedRoute><Scanner /></ProtectedRoute>} />
           {/* Not under /events/:eventId — an unmatched payment has no order, so no event. */}
           <Route path="/payments/unmatched" element={<ProtectedRoute><UnmatchedPayments /></ProtectedRoute>} />
+          {/* Reconciling is a two-sided comparison that needs the width, so it gets its own screen
+              rather than expanding inside the list. */}
+          <Route path="/payments/unmatched/:id" element={<ProtectedRoute><ReconcilePayment /></ProtectedRoute>} />
           <Route path="/buy" element={<ProtectedRoute><BuyTickets /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/events" replace />} />
         </Routes>
