@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, useState, useCallback } from 'react';
 import AuthService from '../services/AuthService';
+import { AUTH_DISABLED, DEV_USER } from '../lib/devAuth';
 
 const AppContext = createContext(null);
 
@@ -21,7 +22,14 @@ const authReducer = (state, action) => {
 };
 
 export function AppProvider({ children }) {
-  const [auth, dispatch] = useReducer(authReducer, {
+  // With the dev bypass on, start settled and authenticated rather than loading:
+  // there is no session to restore and no auth endpoint to ask.
+  const [auth, dispatch] = useReducer(authReducer, AUTH_DISABLED ? {
+    isAuthenticated: true,
+    user: DEV_USER,
+    isLoading: false,
+    error: null,
+  } : {
     isAuthenticated: false,
     user: null,
     isLoading: true,
@@ -46,6 +54,7 @@ export function AppProvider({ children }) {
 
   // Restore/validate the session once on app start.
   useEffect(() => {
+    if (AUTH_DISABLED) return; // nothing to restore, and no /api/auth to ask
     let cancelled = false;
     (async () => {
       dispatch({ type: 'SET_LOADING', payload: true });
@@ -58,8 +67,10 @@ export function AppProvider({ children }) {
   }, []);
 
   // Picks up token/user changes from other tabs, and from client.js clearing
-  // auth after a failed refresh.
+  // auth after a failed refresh. Skipped under the dev bypass: with no tokens in
+  // localStorage these listeners would fire LOGOUT and undo the stub session.
   useEffect(() => {
+    if (AUTH_DISABLED) return;
     window.addEventListener('storage', handleAuthChange);
     window.addEventListener('auth-change', handleAuthChange);
     return () => {
@@ -69,6 +80,7 @@ export function AppProvider({ children }) {
   }, [handleAuthChange]);
 
   async function login(email, password) {
+    if (AUTH_DISABLED) return { success: true, user: DEV_USER };
     dispatch({ type: 'SET_LOADING', payload: true });
     const result = await AuthService.login(email, password);
     if (result.success) dispatch({ type: 'LOGIN_SUCCESS', payload: result.user });
@@ -77,6 +89,13 @@ export function AppProvider({ children }) {
   }
 
   async function logout() {
+    // Inert under the bypass. Dispatching LOGOUT would flip isAuthenticated while
+    // ProtectedRoute kept letting you through — a sign-out button that visibly does
+    // nothing. Better to say why than to half-do it.
+    if (AUTH_DISABLED) {
+      console.warn('[tCketManage] Sign-out ignored: auth is disabled (VITE_DISABLE_AUTH=true).');
+      return;
+    }
     await AuthService.logout();
     dispatch({ type: 'LOGOUT' });
   }

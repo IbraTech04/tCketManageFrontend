@@ -16,7 +16,10 @@ import {
   getRefreshToken,
   storeTokensFromResponse,
 } from './tokenStore';
+import { AUTH_DISABLED } from '../lib/devAuth';
 
+// No token in the bypass case, so this already yields no Authorization header —
+// requests simply go out unauthenticated, which is what tcketmanage-app expects.
 function authHeaders() {
   const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -94,7 +97,11 @@ async function request(path, options = {}) {
   };
   let res = await fetch(BASE + path, { ...options, headers });
 
-  if (res.status === 401 && getRefreshToken()) {
+  // Under the dev bypass a 401 surfaces as a plain error rather than triggering the
+  // refresh-then-redirect dance: there are no tokens to rotate, and bouncing to
+  // /signin would hide the real cause — an endpoint that does enforce auth — behind
+  // a sign-in page the standalone app has no /api/auth to serve.
+  if (res.status === 401 && !AUTH_DISABLED && getRefreshToken()) {
     const token = await refreshAccessToken();
     res = await fetch(BASE + path, { ...options, headers: { ...headers, Authorization: `Bearer ${token}` } });
   }
