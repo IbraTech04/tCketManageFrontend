@@ -352,6 +352,26 @@ export default function ReconcilePayment() {
           <div style={{ flexGrow: 1, overflowY: 'auto', padding: 22, display: 'flex', flexDirection: 'column', gap: 18 }}>
             {selected ? (
               <>
+                {/* A name-only candidate has no code to diff, so say why it is here instead of
+                    showing an empty comparison the operator has to interpret. */}
+                {selected.suggestedByNameOnly && (
+                  <div className="card" style={{
+                    padding: '14px 18px', borderColor: 'var(--blue-border)', background: 'var(--blue-soft)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <Icon name="search" size={14} color="var(--blue)" />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--blue)' }}>
+                        Found by the payer's name, not the code
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.55 }}>
+                      The memo held nothing resembling this order's code. It is here because the name
+                      on the payment appears on the order — which is a way of finding it, not proof
+                      it belongs. Check the amount and the timing before linking.
+                    </div>
+                  </div>
+                )}
+
                 {diff && (
                   <div className="card" style={{ padding: '18px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 14 }}>
@@ -402,7 +422,9 @@ export default function ReconcilePayment() {
                   <CompareRow
                     label="Payer, per the bank"
                     left={payment.senderName || '—'}
-                    rlabel="Buyer on the order"
+                    rlabel={selected.nameMatch === 'FULL' ? 'Buyer on the order — name matches'
+                      : selected.nameMatch === 'PARTIAL' ? 'Buyer on the order — name partly matches'
+                        : 'Buyer on the order'}
                     right={selected.buyerEmail || '—'}
                     rightColor="var(--text-2)"
                     mark={null}
@@ -410,8 +432,9 @@ export default function ReconcilePayment() {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 20px' }}>
                     <span style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
-                      The payer's name is shown but never scored — a bank's name for an account is
-                      routinely not the buyer's name on the order.
+                      The payer's name is how this order was found, but it is never scored — a bank's
+                      name for an account is routinely not the buyer's name on the order. A parent
+                      pays for a student; a joint account carries one name.
                     </span>
                   </div>
                 </div>
@@ -532,10 +555,12 @@ export default function ReconcilePayment() {
                     <div style={{ flexGrow: 1 }} />
                     <span style={{
                       fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
-                      background: s.codeDistance === 0 ? 'var(--green-soft)' : 'var(--amber-soft)',
-                      color: s.codeDistance === 0 ? 'var(--green)' : 'var(--amber)',
+                      background: s.suggestedByNameOnly ? 'var(--blue-soft)'
+                        : s.codeDistance === 0 ? 'var(--green-soft)' : 'var(--amber-soft)',
+                      color: s.suggestedByNameOnly ? 'var(--blue)'
+                        : s.codeDistance === 0 ? 'var(--green)' : 'var(--amber)',
                     }}>
-                      {s.codeDistance === 0 ? 'exact' : `${s.codeDistance} off`}
+                      {s.suggestedByNameOnly ? 'name' : s.codeDistance === 0 ? 'exact' : `${s.codeDistance} off`}
                     </span>
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 6 }}>{s.buyerEmail}</div>

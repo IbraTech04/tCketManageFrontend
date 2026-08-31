@@ -43,6 +43,10 @@ function hintFor(suggestions) {
     return { label: 'No candidates', tone: 'muted' };
   }
   const top = suggestions[0];
+  // A name-only lead is worth surfacing but is not a code match, and the chip must not imply it is.
+  if (top.suggestedByNameOnly) {
+    return { label: `Payer's name matches ${top.referenceCode}`, tone: 'info' };
+  }
   if (top.codeDistance === 0 && !top.amountMatches) {
     return { label: 'Code matches — amount differs', tone: 'bad' };
   }
@@ -57,6 +61,7 @@ const TONES = {
   good: { bg: 'var(--green-soft)', fg: 'var(--green)' },
   warn: { bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   bad: { bg: 'var(--red-soft)', fg: 'var(--red)' },
+  info: { bg: 'var(--blue-soft)', fg: 'var(--blue)' },
   muted: { bg: 'var(--surface-3)', fg: 'var(--text-3)' },
 };
 
